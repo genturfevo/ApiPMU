@@ -157,8 +157,6 @@ public partial class Cheval
 
     public DateTime? DateModif { get; set; }
 
-    public byte[] SsmaTimeStamp { get; set; }
-
     public int? ClasHmp { get; set; }
 
     public int? PtsEd { get; set; }

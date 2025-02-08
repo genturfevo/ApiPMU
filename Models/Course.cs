@@ -107,7 +107,5 @@ public partial class Course
 
     public DateTime? DateModif { get; set; }
 
-    public byte[] SsmaTimeStamp { get; set; }
-
     public short? Age { get; set; }
 }
