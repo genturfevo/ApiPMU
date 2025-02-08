@@ -210,7 +210,7 @@ namespace ApiPMU.Models
     /// <summary>
     /// Entité représentant un programme PMU.
     /// </summary>
-    public class Programme
+    public class ProgrammeData
     {
         public int Id { get; set; }
         public DateTime Date { get; set; }
