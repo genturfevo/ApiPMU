@@ -29,13 +29,24 @@ namespace ApiPMU
             _apiPmuService = apiPmuService;
             _logger = logger;
             _serviceProvider = serviceProvider;
-
-            // Vérifie si une date forcée est spécifiée dans la configuration
-            if (!string.IsNullOrWhiteSpace(debugOptions.Value.ForcedDate) &&
-                DateTime.TryParseExact(debugOptions.Value.ForcedDate, "ddMMyyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
-            {
-                _forcedDate = parsedDate;
-            }
+            //
+            // (utilisable uniquement en mode débogage)
+            //
+            // Fichier appsettings.json :
+            //   "DebugOptions": {
+            //      "ForcedDate": "09022025"
+            //
+            // La date doit avoir le format "ddMMyyyy"
+            // 
+            #if DEBUG
+                if (!string.IsNullOrWhiteSpace(debugOptions.Value.ForcedDate) &&
+                    DateTime.TryParseExact(debugOptions.Value.ForcedDate, "ddMMyyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+                {
+                    _forcedDate = parsedDate;
+                }
+            #else
+                _forcedDate = null;
+            #endif        
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -109,7 +120,7 @@ namespace ApiPMU
             // Envoi du courriel de récapitulatif
             try
             {
-                // Création d'un scope pour obtenir une instance de genturfevoContext
+                // Création d'un scope pour obtenir une instance de ApiPMUDbContext
                 using (var scope = _serviceProvider.CreateScope())
                 {
                     // Récupération du DbContext généré par le scaffolding
