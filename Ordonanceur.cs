@@ -28,20 +28,15 @@ namespace ApiPMU
             _apiPmuService = apiPmuService;
             _logger = logger;
             _serviceProvider = serviceProvider;
-            //
-            // (utilisable uniquement en mode débogage)
-            //
-            // Fichier appsettings.json :
-            //   "DebugOptions": {
-            //      "ForcedDate": "09022025"
-            //
-            // La date doit avoir le format "ddMMyyyy"
-            // 
-            #if DEBUG
-                _forcedDate = DateTime.ParseExact("10022025", "ddMMyyyy", CultureInfo.InvariantCulture);
-            #else
-                _forcedDate = null;
-            #endif
+//
+// (utilisable uniquement en mode débogage)
+// Paramétrage de la date du programme à télécharger
+//
+#if DEBUG
+            _forcedDate = DateTime.ParseExact("10022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+#else
+            _forcedDate = null;
+#endif
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)

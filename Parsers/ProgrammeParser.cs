@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
-using System.Data; // Pour les conversions si besoin.
 using Microsoft.Data.SqlClient; // Veillez à installer le package NuGet Microsoft.Data.SqlClient.
 using Newtonsoft.Json.Linq;
 using ApiPMU.Models; // On utilise ici Programme, Reunion et Course.
@@ -17,7 +14,9 @@ namespace ApiPMU.Parsers
         // Dictionnaire pour ajuster manuellement certaines correspondances entre libellés.
         private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
         {
-            // Exemple : { "PARIS LONGCHAMP", "PARIS-LONGCHAMP" }
+            { "PONT CHATEAU", "PONTCHATEAU" },
+            { "PARIS LONGCHAMP", "PARISLONGCHAMP" },
+            { "PARIS-LONGCHAMP", "PARISLONGCHAMP" }
         };
 
         private readonly string _connectionString;
@@ -71,9 +70,9 @@ namespace ApiPMU.Parsers
                     JToken? courses = reunionToken["courses"];
                     if (courses != null)
                     {
-                        int? numGeny = int.TryParse(reunionToken["NumGeny"]?.ToString(), out int ng) ? (int?)ng : null;
                         foreach (JToken courseToken in courses)
                         {
+                            string numGeny = "PMU" + dateStr + "R" + reunionObj.NumReunion.ToString();
                             Course? courseObj = ProcessCourse(courseToken, numGeny, reunionObj.DateModif ?? DateTime.MinValue);
                             if (courseObj != null)
                             {
@@ -84,6 +83,11 @@ namespace ApiPMU.Parsers
                 }
             }
             return programmeResult;
+        }
+
+        private Course? ProcessCourse(JToken courseToken, object numGeny, DateTime dateTime)
+        {
+            throw new NotImplementedException();
         }
 
         /// <summary>
