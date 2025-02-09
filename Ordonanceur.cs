@@ -23,7 +23,6 @@ namespace ApiPMU
 
         public Ordonanceur(IApiPmuService apiPmuService,
                            ILogger<Ordonanceur> logger,
-                           IOptions<DebugOptions> debugOptions,
                            IServiceProvider serviceProvider)
         {
             _apiPmuService = apiPmuService;
@@ -39,14 +38,10 @@ namespace ApiPMU
             // La date doit avoir le format "ddMMyyyy"
             // 
             #if DEBUG
-                if (!string.IsNullOrWhiteSpace(debugOptions.Value.ForcedDate) &&
-                    DateTime.TryParseExact(debugOptions.Value.ForcedDate, "ddMMyyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
-                {
-                    _forcedDate = parsedDate;
-                }
+                _forcedDate = DateTime.ParseExact("10022025", "ddMMyyyy", CultureInfo.InvariantCulture);
             #else
                 _forcedDate = null;
-            #endif        
+            #endif
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -113,6 +108,7 @@ namespace ApiPMU
 
             // Exemple : extraction du programme de la journée
             var programme = await _apiPmuService.ChargerProgrammeAsync<dynamic>(dateStr);
+
             // Vous pouvez ajouter ici d'autres appels (extraction des courses, participants, etc.)
 
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);

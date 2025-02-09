@@ -43,7 +43,12 @@ namespace ApiPMU.Services
         /// </summary>
         private async Task<T> GetJsonFromUrlAsync<T>(string url)
         {
-            HttpResponseMessage response = await _httpClient.GetAsync(url);
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3");
+            request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+            request.Headers.Add("Accept-Language", "en-US,en;q=0.5");
+
+            HttpResponseMessage response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
             string jsonString = await response.Content.ReadAsStringAsync();
             T? result = JsonConvert.DeserializeObject<T>(jsonString);

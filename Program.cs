@@ -15,8 +15,8 @@ namespace ApiPMU
             var host = Host.CreateDefaultBuilder(args)
                 .ConfigureServices((context, services) =>
                 {
-                    // Récupération de la chaîne de connexion depuis appsettings.json
-                    var connectionString = context.Configuration.GetConnectionString("DefaultConnection");
+                    // Chaîne de connexion intégrée directement dans le code
+                    var connectionString = "Data Source=.\\SQLEXPRESS;Initial Catalog=genturfevo;User ID=genturfevo;Password=Laurence#1968#;TrustServerCertificate=True";
 
                     // Enregistrement du DbContext configuré pour SQL Server
                     services.AddDbContext<ApiPMUDbContext>(options =>
