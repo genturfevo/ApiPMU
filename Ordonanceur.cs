@@ -1,10 +1,12 @@
 ﻿using System.Globalization;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using ApiPMU.Services;
 using ApiPMU.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using ApiPMU.Parsers;
+using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 
 namespace ApiPMU
 {
@@ -102,9 +104,23 @@ namespace ApiPMU
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
             // Exemple : extraction du programme de la journée
-            var programme = await _apiPmuService.ChargerProgrammeAsync<dynamic>(dateStr);
+            var programmeData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(dateStr);
 
-            // Vous pouvez ajouter ici d'autres appels (extraction des courses, participants, etc.)
+            // Conversion du résultat en chaîne JSON pour le parser.
+            string programmeJson = JsonConvert.SerializeObject(programmeData);
+
+            // Utilisation de ProgrammeParser pour transformer le JSON en objet métier.
+            // On récupère la chaîne de connexion depuis le DbContext via un scope.
+            Programme programmeParsed;
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+                string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
+                var parser = new ProgrammeParser(connectionString);
+                programmeParsed = parser.ParseProgramme(programmeJson, dateStr);
+            }
+            _logger.LogInformation("Programme parsé avec {CountReunions} réunions et {CountCourses} courses.",
+                                   programmeParsed.Reunions.Count, programmeParsed.Courses.Count);
 
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 

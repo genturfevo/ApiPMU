@@ -2,7 +2,8 @@
 using System.Text;
 using Microsoft.Data.SqlClient; // Veillez à installer le package NuGet Microsoft.Data.SqlClient.
 using Newtonsoft.Json.Linq;
-using ApiPMU.Models; // On utilise ici Programme, Reunion et Course.
+using ApiPMU.Models;
+using System.Diagnostics.CodeAnalysis; // On utilise ici Programme, Reunion et Course.
 
 namespace ApiPMU.Parsers
 {
@@ -14,12 +15,14 @@ namespace ApiPMU.Parsers
         // Dictionnaire pour ajuster manuellement certaines correspondances entre libellés.
         private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
         {
+            { "CAGNES/MER", "CAGNES SUR MER" },
             { "PONT CHATEAU", "PONTCHATEAU" },
             { "PARIS LONGCHAMP", "PARISLONGCHAMP" },
             { "PARIS-LONGCHAMP", "PARISLONGCHAMP" }
         };
 
         private readonly string _connectionString;
+        private string numGeny= string.Empty;
 
         /// <summary>
         /// Constructeur nécessitant la chaîne de connexion (pour la vérification en BDD).
@@ -29,6 +32,7 @@ namespace ApiPMU.Parsers
         {
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
+
             _connectionString = connectionString;
         }
 
@@ -44,7 +48,6 @@ namespace ApiPMU.Parsers
                 throw new ArgumentNullException(nameof(json));
 
             Programme programmeResult = new Programme();
-
             JObject data = JObject.Parse(json);
             JToken? prog = data["programme"];
             if (prog == null)
@@ -52,7 +55,6 @@ namespace ApiPMU.Parsers
                 Console.WriteLine("La clé 'programme' est absente du JSON.");
                 return programmeResult;
             }
-
             JToken? reunions = prog["reunions"];
             if (reunions == null)
             {
@@ -62,18 +64,18 @@ namespace ApiPMU.Parsers
 
             foreach (JToken reunionToken in reunions)
             {
+                numGeny = "PMU" + dateStr + "R";
                 Reunion? reunionObj = ProcessReunion(reunionToken);
                 if (reunionObj != null)
                 {
                     programmeResult.Reunions.Add(reunionObj);
-
                     JToken? courses = reunionToken["courses"];
                     if (courses != null)
                     {
                         foreach (JToken courseToken in courses)
                         {
-                            string numGeny = "PMU" + dateStr + "R" + reunionObj.NumReunion.ToString();
-                            Course? courseObj = ProcessCourse(courseToken, numGeny, reunionObj.DateModif ?? DateTime.MinValue);
+                            // Construction d'un identifiant course sous forme de chaîne.
+                            Course? courseObj = ProcessCourse(courseToken);
                             if (courseObj != null)
                             {
                                 programmeResult.Courses.Add(courseObj);
@@ -83,11 +85,6 @@ namespace ApiPMU.Parsers
                 }
             }
             return programmeResult;
-        }
-
-        private Course? ProcessCourse(JToken courseToken, object numGeny, DateTime dateTime)
-        {
-            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -100,76 +97,70 @@ namespace ApiPMU.Parsers
             try
             {
                 // Conversion numérique avec int.TryParse.
-                int? numGeny = int.TryParse(reunion["NumGeny"]?.ToString(), out int ng) ? (int?)ng : null;
-                int? numReunion = int.TryParse(reunion["NumReunion"]?.ToString(), out int nr) ? (int?)nr : null;
-                DateTime dateReunion = DateTime.TryParse(reunion["DateReunion"]?.ToString(), out DateTime dr) ? dr : DateTime.MinValue;
-                DateTime dateModif = DateTime.TryParse(reunion["DateModif"]?.ToString(), out DateTime dm) ? dm : DateTime.MinValue;
-
+                int numReunion = int.TryParse(reunion["numOfficiel"]?.ToString(), out int nr) ? nr : 0;
+                numGeny = numGeny + numReunion;
+                long timestamp = long.TryParse(reunion["dateReunion"]?.ToString(), out long ts) ? ts : 0;
+                DateTime dateReunion = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
+                string formattedDateReunion = dateReunion.ToString("yyyy-MM-dd");
                 JToken? hippodrome = reunion["hippodrome"];
-                if (hippodrome == null)
-                {
-                    Console.WriteLine("La réunion ne contient pas de section 'hippodrome'.");
-                    return null;
-                }
-                string libelleCourt = hippodrome["libelleCourt"]?.ToString() ?? string.Empty;
+                string libelleCourt = hippodrome?["libelleCourt"]?.ToString() ?? string.Empty;
                 string normalizedLibelleCourt = NormalizeString(libelleCourt);
-                if (Correspondances.ContainsKey(normalizedLibelleCourt))
-                {
-                    normalizedLibelleCourt = Correspondances[normalizedLibelleCourt];
-                }
-
-                if (!IsLieuCoursePresent(normalizedLibelleCourt))
-                {
-                    Console.WriteLine($"La réunion avec libelléCourt '{libelleCourt}' (normalisé: '{normalizedLibelleCourt}') n'est pas présente en BDD.");
-                    return null;
-                }
-
-                return new Reunion
-                {
-                    NumGeny = numGeny.ToString(),
+                if (Correspondances.ContainsKey(normalizedLibelleCourt)) { normalizedLibelleCourt = Correspondances[normalizedLibelleCourt]; }
+                if (!IsLieuCoursePresent(normalizedLibelleCourt)) { return null; }
+                return new Reunion {
+                    NumGeny = numGeny,
                     NumReunion = numReunion,
                     LieuCourse = normalizedLibelleCourt,
                     DateReunion = dateReunion,
-                    DateModif = dateModif
+                    DateModif = DateTime.Now
                 };
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Erreur lors du traitement d'une réunion: " + ex.Message);
-                return null;
-            }
+            catch { return null; }
         }
 
         /// <summary>
         /// Transforme un token JSON en une instance de Course.
         /// </summary>
         /// <param name="course">Token JSON de la course.</param>
-        /// <param name="numGeny">NumGeny hérité de la réunion (peut être null).</param>
+        /// <param name="numGeny">Identifiant de course généré (sous forme de chaîne).</param>
         /// <param name="reunionDateModif">Date de modification de la réunion (utilisée par défaut si absente dans la course).</param>
         /// <returns>Instance de Course ou null en cas d'erreur.</returns>
-        private Course? ProcessCourse(JToken course, int? numGeny, DateTime reunionDateModif)
+        private Course? ProcessCourse(JToken course)
         {
             try
             {
-                int? numCourse = int.TryParse(course["NumCourse"]?.ToString(), out int nc) ? (int?)nc : null;
-                string discipline = course["Discipline"]?.ToString() ?? string.Empty;
-                bool? jCouples = course["JCouples"]?.ToObject<bool?>();
-                bool? jTrio = course["JTrio"]?.ToObject<bool?>();
-                bool? jMulti = course["JMulti"]?.ToObject<bool?>();
-                bool? jQuinte = course["JQuinte"]?.ToObject<bool?>();
-                bool? autostart = bool.TryParse(course["Autostart"]?.ToString(), out bool a) ? (bool?)a : null;
-                string typeCourse = course["TypeCourse"]?.ToString() ?? string.Empty;
-                string cordage = course["Cordage"]?.ToString() ?? string.Empty;
-                int allocation = int.TryParse(course["Allocation"]?.ToString(), out int alloc) ? alloc : 0;
-                int? distance = int.TryParse(course["Distance"]?.ToString(), out int dist) ? (int?)dist : null;
-                short? partants = short.TryParse(course["Partants"]?.ToString(), out short pt) ? (short?)pt : null;
-                string libelle = course["Libelle"]?.ToString() ?? string.Empty;
-                DateTime dateModif = DateTime.TryParse(course["DateModif"]?.ToString(), out DateTime cdm) ? cdm : reunionDateModif;
-
-                return new Course
-                {
-                    NumGeny = numGeny.ToString(),
-                    NumCourse = (short)(numCourse ?? 0), // Fix for CS8629
+                int numCourse = int.TryParse(course["numExterne"]?.ToString(), out int nc) ? nc : 0;
+                string discipline = course["specialite"]?.ToString() switch {
+                    string s when s.Contains("ATTELE") => "ATTELE",
+                    string s when s.Contains("MONTE") => "MONTE",
+                    string s when s.Contains("PLAT") => "PLAT",
+                    string s when s.Contains("HAIES") => "HAIES",
+                    string s when s.Contains("STEEPLE") => "STEEPLE",
+                    string s when s.Contains("CROSS") => "CROSS",
+                    _ => string.Empty
+                };
+                long timestamp = long.TryParse(course["heureDepart"]?.ToString(), out long ts) ? ts : 0;
+                DateTime dateReunion = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
+                string formattedDepart = dateReunion.ToString("HHhmm");
+                JToken? paris = course["paris"];
+                bool? jCouples = course["typePari"]?.Any(tp => tp.ToString().Contains("COUPLE_PLACE"));
+                bool? jTrio = course["typePari"]?.Any(tp => tp.ToString().Contains("TRIO"));
+                bool? jMulti = course["typePari"]?.Any(tp => tp.ToString().Contains("MULTI"));
+                bool? jQuinte = course["typePari"]?.Any(tp => tp.ToString().Contains("QUINTE"));
+                bool? autostart = course["categorieParticularite"]?.ToString().Contains("AUTOSTART");
+                string cordage = course["corde"]?.ToString() switch {
+                    string s when s.Contains("GAUCHE") => "GAUCHE",
+                    string s when s.Contains("DROITE") => "DROITE",
+                    _ => "GAUCHE"
+                };
+                int allocation = int.TryParse(course["montantPrix"]?.ToString(), out int alloc) ? alloc : 0;
+                string typeCourse = CategorieCourseScraping(course["conditions"]?.ToString() ?? string.Empty, allocation);
+                int? distance = int.TryParse(course["distance"]?.ToString(), out int dist) ? (int?)dist : null;
+                short? partants = short.TryParse(course["nombreDeclaresPartants"]?.ToString(), out short pt) ? (short?)pt : null;
+                string libelle = ("Depart " + formattedDepart + " - " + course["Libelle"]?.ToString() ?? string.Empty).Substring(0, 255);
+                return new Course {
+                    NumGeny = numGeny,
+                    NumCourse = (short)numCourse,
                     Discipline = discipline,
                     JCouples = jCouples,
                     JTrio = jTrio,
@@ -182,14 +173,10 @@ namespace ApiPMU.Parsers
                     Distance = distance,
                     Partants = partants,
                     Libelle = libelle,
-                    DateModif = dateModif
+                    DateModif = DateTime.Now
                 };
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Erreur lors du traitement d'une course: " + ex.Message);
-                return null;
-            }
+            catch { return null; }
         }
 
         /// <summary>
@@ -240,6 +227,72 @@ namespace ApiPMU.Parsers
                     int count = (int)command.ExecuteScalar();
                     return count > 0;
                 }
+            }
+        }
+        /// <summary>
+        /// Détermine la catégorie d'une course en fonction d'un libellé et du montant de l'allocation.
+        /// </summary>
+        /// <param name="myLib">Libellé décrivant la course.</param>
+        /// <param name="myAlloc">Montant de l'allocation.</param>
+        /// <returns>Une chaîne représentant la catégorie de la course.</returns>
+        public static string CategorieCourseScraping(string myLib, int myAlloc)
+        {
+            if (string.IsNullOrWhiteSpace(myLib))
+            {
+                return "G";
+            }
+
+            myLib = myLib.ToLowerInvariant();
+
+            if (myLib.Contains("groupe 3") || myLib.Contains("groupe iii"))
+                return "3";
+            if (myLib.Contains("groupe 2") || myLib.Contains("groupe ii"))
+                return "2";
+            if (myLib.Contains("groupe 1") || myLib.Contains("groupe i"))
+                return "1";
+            if (myLib.Contains("listed") && !myLib.Contains("ayant pas"))
+                return "L";
+            if (myLib.Contains("course a ") || myLib.Contains("classe 1"))
+                return "A";
+            if (myLib.Contains("course b ") || myLib.Contains("classe 2"))
+                return "B";
+            if (myLib.Contains("course c ") || myLib.Contains("classe 3"))
+                return "C";
+            if (myLib.Contains("course d ") || myLib.Contains("classe 4"))
+                return "D";
+            if (myLib.Contains("course e "))
+                return "E";
+            if (myLib.Contains("course f "))
+                return "F";
+            if (myLib.Contains("course g ") || myLib.Contains("course h"))
+                return "G";
+            if (myLib.Contains("reclamer") || myLib.Contains("réclamer"))
+                return "R";
+            if (myLib.Contains("apprentis") || myLib.Contains("lads"))
+                return "W";
+            if (myLib.Contains("amateur") || myLib.Contains("gentlemen-riders") || myLib.Contains("cavalières"))
+                return "X";
+
+            // Si aucun indicateur textuel n'est retrouvé, déterminer la catégorie selon l'allocation.
+            if (myAlloc > 0)
+            {
+                if (myAlloc >= 35000)
+                    return "A";
+                if (myAlloc >= 25000)
+                    return "B";
+                if (myAlloc >= 20000)
+                    return "C";
+                if (myAlloc >= 15000)
+                    return "D";
+                if (myAlloc >= 10000)
+                    return "E";
+                if (myAlloc >= 8000)
+                    return "F";
+                return "G";
+            }
+            else
+            {
+                return "G";
             }
         }
     }
