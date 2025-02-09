@@ -8,12 +8,12 @@ namespace ApiPMU.Services
     /// <summary>
     /// Service responsable de l'importation du programme et de l'enregistrement des données en base.
     /// </summary>
-    public class ProgrammeDataService
+    public class ProgrammeService
     {
         private readonly ApiPMUDbContext _dbContext;
         private readonly IApiPmuService _apiPmuService;
 
-        public ProgrammeDataService(ApiPMUDbContext dbContext, IApiPmuService apiPmuService)
+        public ProgrammeService(ApiPMUDbContext dbContext, IApiPmuService apiPmuService)
         {
             _dbContext = dbContext;
             _apiPmuService = apiPmuService;

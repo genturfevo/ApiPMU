@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace ApiPMU.Models;
 
-public partial class EntraineurJokey
+public class EntraineurJokey
 {
     public string NumGeny { get; set; }
 
@@ -19,7 +19,7 @@ public partial class EntraineurJokey
 
     public int? Ecart { get; set; }
 
-    public short? NbCr { get; set; }
+    public short? NbCR { get; set; }
 
     public DateTime? DateModif { get; set; }
 }

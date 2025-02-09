@@ -5,7 +5,7 @@ using System.Text;
 using System.Data; // Pour les conversions si besoin.
 using Microsoft.Data.SqlClient; // Veillez à installer le package NuGet Microsoft.Data.SqlClient.
 using Newtonsoft.Json.Linq;
-using ApiPMU.Models; // On utilise ici ProgrammeData, Reunion et Course.
+using ApiPMU.Models; // On utilise ici Programme, Reunion et Course.
 
 namespace ApiPMU.Parsers
 {
@@ -34,27 +34,27 @@ namespace ApiPMU.Parsers
         }
 
         /// <summary>
-        /// Parse l'intégralité du JSON et retourne un objet ProgrammeData regroupant réunions et courses.
+        /// Parse l'intégralité du JSON et retourne un objet Programme regroupant réunions et courses.
         /// </summary>
         /// <param name="json">Chaîne JSON à parser.</param>
         /// <param name="dateStr">Paramètre additionnel (ex. date d'extraction) – non utilisé ici mais conservé pour la signature.</param>
-        /// <returns>Un objet ProgrammeData contenant les listes de réunions et de courses.</returns>
-        public ProgrammeData ParseProgramme(string json, string dateStr)
+        /// <returns>Un objet Programme contenant les listes de réunions et de courses.</returns>
+        public Programme ParseProgramme(string json, string dateStr)
         {
             if (json == null)
                 throw new ArgumentNullException(nameof(json));
 
-            ProgrammeData programmeResult = new ProgrammeData();
+            Programme programmeResult = new Programme();
 
             JObject data = JObject.Parse(json);
-            JToken prog = data["programme"];
+            JToken? prog = data["programme"];
             if (prog == null)
             {
                 Console.WriteLine("La clé 'programme' est absente du JSON.");
                 return programmeResult;
             }
 
-            JToken reunions = prog["reunions"];
+            JToken? reunions = prog["reunions"];
             if (reunions == null)
             {
                 Console.WriteLine("La clé 'reunions' est absente du JSON.");

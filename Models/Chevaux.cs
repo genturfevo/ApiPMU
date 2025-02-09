@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace ApiPMU.Models;
 
-public partial class Cheval
+public class Cheval
 {
     public string NumGeny { get; set; }
 
@@ -29,7 +29,7 @@ public partial class Cheval
 
     public int? Gains { get; set; }
 
-    public string ZoneAbc { get; set; }
+    public string ZoneABC { get; set; }
 
     public short? ClaZone { get; set; }
 
@@ -45,13 +45,13 @@ public partial class Cheval
 
     public short? PlaceArrivee { get; set; }
 
-    public double? ClasCoefReussite { get; set; }
+    public float? ClasCoefReussite { get; set; }
 
     public float? CoefReussite { get; set; }
 
     public float? IndFor { get; set; }
 
-    public double? IndForme { get; set; }
+    public float? IndForme { get; set; }
 
     public int? NbCourses { get; set; }
 
@@ -61,25 +61,25 @@ public partial class Cheval
 
     public int? ClaCote { get; set; }
 
-    public float? PtsOr { get; set; }
+    public float? PtsOR { get; set; }
 
-    public int? ClaOr { get; set; }
+    public int? ClaOR { get; set; }
 
-    public int? PtsAr { get; set; }
+    public int? PtsAR { get; set; }
 
-    public int? ClaAr { get; set; }
+    public int? ClaAR { get; set; }
 
-    public float? PtsCx { get; set; }
+    public float? PtsCX { get; set; }
 
-    public int? ClaCx { get; set; }
+    public int? ClaCX { get; set; }
 
-    public int? PtsCrifx { get; set; }
+    public int? PtsCRIFX { get; set; }
 
-    public int? ClaCrifx { get; set; }
+    public int? ClaCRIFX { get; set; }
 
-    public int? PtsTmatic { get; set; }
+    public int? PtsTMatic { get; set; }
 
-    public int? ClaTmatic { get; set; }
+    public int? ClaTMatic { get; set; }
 
     public int? PtsHisto { get; set; }
 
@@ -103,29 +103,29 @@ public partial class Cheval
 
     public string Median { get; set; }
 
-    public int? ClasMn { get; set; }
+    public int? ClasMN { get; set; }
 
-    public int? ClasPt { get; set; }
+    public int? ClasPT { get; set; }
 
-    public int? ClasRe { get; set; }
+    public int? ClasRE { get; set; }
 
-    public int? ClasRd { get; set; }
+    public int? ClasRD { get; set; }
 
-    public int? ClaIdc { get; set; }
+    public int? ClaIDC { get; set; }
 
-    public int? ClaCfp { get; set; }
+    public int? ClaCFP { get; set; }
 
-    public int? PtsMn { get; set; }
+    public int? PtsMN { get; set; }
 
-    public int? PtsPt { get; set; }
+    public int? PtsPT { get; set; }
 
-    public int? PtsRd { get; set; }
+    public int? PtsRD { get; set; }
 
-    public int? PtsRe { get; set; }
+    public int? PtsRE { get; set; }
 
-    public float? PtsCfp { get; set; }
+    public float? PtsCFP { get; set; }
 
-    public float? PtsIdc { get; set; }
+    public float? PtsIDC { get; set; }
 
     public int? ClasPtsStats { get; set; }
 
@@ -155,23 +155,23 @@ public partial class Cheval
 
     public string Avis { get; set; }
 
-    public DateTime? DateModif { get; set; }
+    public int? ClasHMP { get; set; }
 
-    public int? ClasHmp { get; set; }
+    public int? PtsED { get; set; }
 
-    public int? PtsEd { get; set; }
-
-    public int? ClasEd { get; set; }
+    public int? ClasED { get; set; }
 
     public int? PtsR10 { get; set; }
 
     public int? ClasR10 { get; set; }
 
-    public int? PtsRc { get; set; }
+    public int? PtsRC { get; set; }
 
-    public int? ClasRc { get; set; }
+    public int? ClasRC { get; set; }
 
-    public int? Ja { get; set; }
+    public int? JA { get; set; }
 
     public string Musique { get; set; }
+
+    public DateTime? DateModif { get; set; }
 }

@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace ApiPMU.Models;
 
-public partial class Course
+public class Course
 {
     public string NumGeny { get; set; }
 
@@ -15,13 +15,13 @@ public partial class Course
 
     public float? Difficulte { get; set; }
 
-    public bool? Jcouples { get; set; }
+    public bool? JCouples { get; set; }
 
-    public bool? Jtrio { get; set; }
+    public bool? JTrio { get; set; }
 
-    public bool? Jmulti { get; set; }
+    public bool? JMulti { get; set; }
 
-    public bool? Jquinte { get; set; }
+    public bool? JQuinte { get; set; }
 
     public bool? Autostart { get; set; }
 
@@ -105,7 +105,7 @@ public partial class Course
 
     public int? CptStats { get; set; }
 
-    public DateTime? DateModif { get; set; }
-
     public short? Age { get; set; }
+
+    public DateTime? DateModif { get; set; }
 }

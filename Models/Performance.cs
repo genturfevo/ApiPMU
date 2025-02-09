@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace ApiPMU.Models;
 
-public partial class Performance
+public class Performance
 {
     public string Nom { get; set; }
 
@@ -35,7 +35,7 @@ public partial class Performance
 
     public string Place { get; set; }
 
-    public string RedKdist { get; set; }
+    public string RedKDist { get; set; }
 
     public float? Cote { get; set; }
 

@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace ApiPMU.Models;
 
-public partial class Reunion
+public class Reunion
 {
     public string NumGeny { get; set; }
 
