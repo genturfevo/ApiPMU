@@ -121,7 +121,7 @@ namespace ApiPMU.Parsers
 
                 return new Reunion
                 {
-                    NumGeny = numGeny,
+                    NumGeny = numGeny.ToString(),
                     NumReunion = numReunion,
                     LieuCourse = normalizedLibelleCourt,
                     DateReunion = dateReunion,
@@ -148,14 +148,14 @@ namespace ApiPMU.Parsers
             {
                 int? numCourse = int.TryParse(course["NumCourse"]?.ToString(), out int nc) ? (int?)nc : null;
                 string discipline = course["Discipline"]?.ToString() ?? string.Empty;
-                string jCouples = course["Jcouples"]?.ToString() ?? string.Empty;
-                string jTrio = course["Jtrio"]?.ToString() ?? string.Empty;
-                string jMulti = course["Jmulti"]?.ToString() ?? string.Empty;
-                string jQuinte = course["Jquinte"]?.ToString() ?? string.Empty;
+                bool? jCouples = course["JCouples"]?.ToObject<bool?>();
+                bool? jTrio = course["JTrio"]?.ToObject<bool?>();
+                bool? jMulti = course["JMulti"]?.ToObject<bool?>();
+                bool? jQuinte = course["JQuinte"]?.ToObject<bool?>();
                 bool? autostart = bool.TryParse(course["Autostart"]?.ToString(), out bool a) ? (bool?)a : null;
                 string typeCourse = course["TypeCourse"]?.ToString() ?? string.Empty;
                 string cordage = course["Cordage"]?.ToString() ?? string.Empty;
-                string allocation = course["Allocation"]?.ToString() ?? string.Empty;
+                int allocation = int.TryParse(course["Allocation"]?.ToString(), out int alloc) ? alloc : 0;
                 int? distance = int.TryParse(course["Distance"]?.ToString(), out int dist) ? (int?)dist : null;
                 short? partants = short.TryParse(course["Partants"]?.ToString(), out short pt) ? (short?)pt : null;
                 string libelle = course["Libelle"]?.ToString() ?? string.Empty;
@@ -163,13 +163,13 @@ namespace ApiPMU.Parsers
 
                 return new Course
                 {
-                    NumGeny = numGeny,
-                    NumCourse = numCourse,
+                    NumGeny = numGeny.ToString(),
+                    NumCourse = (short)(numCourse ?? 0), // Fix for CS8629
                     Discipline = discipline,
-                    Jcouples = jCouples,
-                    Jtrio = jTrio,
-                    Jmulti = jMulti,
-                    Jquinte = jQuinte,
+                    JCouples = jCouples,
+                    JTrio = jTrio,
+                    JMulti = jMulti,
+                    JQuinte = jQuinte,
                     Autostart = autostart,
                     TypeCourse = typeCourse,
                     Cordage = cordage,
