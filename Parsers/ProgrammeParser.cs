@@ -68,12 +68,13 @@ namespace ApiPMU.Parsers
                 {
                     programmeResult.Reunions.Add(reunionObj);
 
-                    JToken courses = reunionToken["courses"];
+                    JToken? courses = reunionToken["courses"];
                     if (courses != null)
                     {
+                        int? numGeny = int.TryParse(reunionToken["NumGeny"]?.ToString(), out int ng) ? (int?)ng : null;
                         foreach (JToken courseToken in courses)
                         {
-                            Course? courseObj = ProcessCourse(courseToken, reunionObj.NumGeny, reunionObj.DateModif);
+                            Course? courseObj = ProcessCourse(courseToken, numGeny, reunionObj.DateModif ?? DateTime.MinValue);
                             if (courseObj != null)
                             {
                                 programmeResult.Courses.Add(courseObj);

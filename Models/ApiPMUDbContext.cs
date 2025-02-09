@@ -1,7 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using ApiPMU.Models;
 
-namespace ApiPMU
+namespace ApiPMU.Models
 {
     /// <summary>
     /// Contexte Entity Framework pour l'API PMU.
@@ -44,7 +43,7 @@ namespace ApiPMU
             modelBuilder.Entity<Course>(entity =>
             {
                 entity.ToTable("Course");
-                entity.HasKey(e => new { e.NumGeny, e.NumCourse });  // clé composite
+                entity.HasNoKey();
                 entity.Property(e => e.NumGeny).HasColumnType("nvarchar");  // NumGeny
                 entity.Property(e => e.NumCourse).HasColumnType("smallint");  // NumCourse
                 entity.Property(e => e.Discipline).HasColumnType("nvarchar");  // Discipline
@@ -102,6 +101,7 @@ namespace ApiPMU
             modelBuilder.Entity<Cheval>(entity =>
             {
                 entity.ToTable("Chevaux");
+                entity.HasNoKey();
                 entity.Property(e => e.NumGeny).HasColumnType("nvarchar(50)");  // NumGeny
                 entity.Property(e => e.NumCourse).HasColumnType("smallint");  // NumCourse
                 entity.Property(e => e.Numero).HasColumnType("smallint");  // Numero
@@ -192,6 +192,7 @@ namespace ApiPMU
             modelBuilder.Entity<EntraineurJokey>(entity =>
             {
                 entity.ToTable("EntraineurJokey");
+                entity.HasNoKey();
                 entity.Property(e => e.NumGeny).HasColumnType("nvarchar(50)");  // NumGeny
                 entity.Property(e => e.Entjok).HasColumnType("nvarchar(50)");  // Entjok
                 entity.Property(e => e.Nom).HasColumnType("nvarchar(50)");  // Nom
@@ -206,6 +207,7 @@ namespace ApiPMU
             modelBuilder.Entity<Performance>(entity =>
             {
                 entity.ToTable("Performances");
+                entity.HasNoKey();
                 entity.Property(e => e.Nom).HasColumnType("nvarchar(50)");  // Nom
                 entity.Property(e => e.DatePerf).HasColumnType("datetime2");  // DatePerf
                 entity.Property(e => e.Lieu).HasColumnType("nvarchar(50)");  // Lieu
@@ -227,8 +229,5 @@ namespace ApiPMU
                 entity.Property(e => e.DateModif).HasColumnType("datetime2");  // DateModif
             });
         }
-    }
-    public class Programme
-    {
     }
 }

@@ -35,7 +35,7 @@ namespace ApiPMU.Services
 
             // 3. Enregistrement dans la base de données.
             // Ajout de la réunion et des courses à l'EF DbContext (les entités doivent être définies dans ApiPMU.Models).
-            _dbContext.Reunions.Add(parsedProgramme.Reunion);
+            _dbContext.Reunions.AddRange(parsedProgramme.Reunions);
             _dbContext.Courses.AddRange(parsedProgramme.Courses);
 
             await _dbContext.SaveChangesAsync();
