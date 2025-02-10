@@ -3,7 +3,6 @@ using System.Text;
 using Microsoft.Data.SqlClient; // Veillez à installer le package NuGet Microsoft.Data.SqlClient.
 using Newtonsoft.Json.Linq;
 using ApiPMU.Models;
-using System.Diagnostics.CodeAnalysis; // On utilise ici Programme, Reunion et Course.
 
 namespace ApiPMU.Parsers
 {
@@ -195,11 +194,10 @@ namespace ApiPMU.Parsers
         {
             if (string.IsNullOrEmpty(input))
                 return string.Empty;
-            string result = input.ToUpperInvariant().Replace("'", " ");
+            string result = input.ToUpperInvariant().Replace("'", " ").Replace("-", " ");
             result = RemoveAccents(result);
             return result;
         }
-
         /// <summary>
         /// Supprime les accents d'une chaîne.
         /// </summary>
@@ -216,7 +214,6 @@ namespace ApiPMU.Parsers
             }
             return sb.ToString().Normalize(NormalizationForm.FormC);
         }
-
         /// <summary>
         /// Vérifie en base si le lieu (après normalisation) est présent dans la table dbo.Reunions.
         /// </summary>
