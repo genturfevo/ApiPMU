@@ -15,8 +15,14 @@ namespace ApiPMU.Parsers
         // Dictionnaire pour ajuster manuellement certaines correspondances entre libellés.
         private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
         {
+            { "AGEN LA GARENNE", "AGEN LE PASSAGE" },
             { "CAGNES/MER", "CAGNES SUR MER" },
+            { "CHATILLON/CHALARONNE", "CHATILLON SUR CHALARONNE" },
+            { "LE LION D'ANGERS", "LE LION D ANGERS" },
+            { "LYON-PARILLY", "LYON PARILLY" },
+            { "MONS (GHLIN)", "MONS" },
             { "PONT CHATEAU", "PONTCHATEAU" },
+            { "PONT DE VIVAUX", "MARSEILLE VIVAUX" },
             { "PARIS LONGCHAMP", "PARISLONGCHAMP" },
             { "PARIS-LONGCHAMP", "PARISLONGCHAMP" }
         };
@@ -104,6 +110,7 @@ namespace ApiPMU.Parsers
                 string formattedDateReunion = dateReunion.ToString("yyyy-MM-dd");
                 JToken? hippodrome = reunion["hippodrome"];
                 string libelleCourt = hippodrome?["libelleCourt"]?.ToString() ?? string.Empty;
+                libelleCourt = ReplaceAccentsExplicit(libelleCourt).ToUpper();
                 string normalizedLibelleCourt = NormalizeString(libelleCourt);
                 if (Correspondances.ContainsKey(normalizedLibelleCourt)) { normalizedLibelleCourt = Correspondances[normalizedLibelleCourt]; }
                 if (!IsLieuCoursePresent(normalizedLibelleCourt)) { return null; }
@@ -141,7 +148,7 @@ namespace ApiPMU.Parsers
                 };
                 long timestamp = long.TryParse(course["heureDepart"]?.ToString(), out long ts) ? ts : 0;
                 DateTime dateReunion = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
-                string formattedDepart = dateReunion.ToString("HHhmm");
+                string formattedDepart = dateReunion.ToString("HH:mm");
                 JToken? paris = course["paris"];
                 bool? jCouples = course["typePari"]?.Any(tp => tp.ToString().Contains("COUPLE_PLACE"));
                 bool? jTrio = course["typePari"]?.Any(tp => tp.ToString().Contains("TRIO"));
@@ -157,7 +164,7 @@ namespace ApiPMU.Parsers
                 string typeCourse = CategorieCourseScraping(course["conditions"]?.ToString() ?? string.Empty, allocation);
                 int? distance = int.TryParse(course["distance"]?.ToString(), out int dist) ? (int?)dist : null;
                 short? partants = short.TryParse(course["nombreDeclaresPartants"]?.ToString(), out short pt) ? (short?)pt : null;
-                string libelle = ("Depart " + formattedDepart + " - " + course["Libelle"]?.ToString() ?? string.Empty).Substring(0, 255);
+                string libelle = ("Depart " + formattedDepart.Replace(":","h") + " - " + course["Libelle"]?.ToString() ?? string.Empty);
                 return new Course {
                     NumGeny = numGeny,
                     NumCourse = (short)numCourse,
@@ -294,6 +301,28 @@ namespace ApiPMU.Parsers
             {
                 return "G";
             }
+        }
+        /// <summary>
+        /// supprime les accents.
+        /// </summary>
+        /// <param name="myLib">Libellé décrivant la course.</param>
+        /// <returns>Une chaîne sans accent.</returns>
+        public static string ReplaceAccentsExplicit(string myLib)
+        {
+            string accents = "éèêëàâäîïôöùûüçÉÈÊËÀÂÄÎÏÔÖÙÛÜÇ";
+            string replacements = "eeeeaaaiioouuucEEEEAAAIIOOUUUC";
+            StringBuilder result = new StringBuilder();
+
+            foreach (char c in myLib)
+            {
+                int index = accents.IndexOf(c);
+                if (index >= 0)
+                    result.Append(replacements[index]);
+                else
+                    result.Append(c);
+            }
+
+            return result.ToString();
         }
     }
 }

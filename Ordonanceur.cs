@@ -30,10 +30,12 @@ namespace ApiPMU
             _apiPmuService = apiPmuService;
             _logger = logger;
             _serviceProvider = serviceProvider;
-//
-// (utilisable uniquement en mode débogage)
-// Paramétrage de la date du programme à télécharger
-//
+            
+            // ************************************************* //
+            //      (utilisable uniquement en mode débogage)     //
+            // Paramétrage de la date du programme à télécharger //
+            // ************************************************* //
+            
 #if DEBUG
             _forcedDate = DateTime.ParseExact("10022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
@@ -59,7 +61,10 @@ namespace ApiPMU
             {
                 try
                 {
-                    // Calcul du prochain horaire d'exécution à 00h01
+                    // ********************************************** //
+                    // Calcul du prochain horaire d'exécution à 00h01 //
+                    // ********************************************** //
+                    //
                     DateTime now = DateTime.Now;
                     DateTime nextRunTime = new DateTime(now.Year, now.Month, now.Day, 0, 1, 0);
                     if (now >= nextRunTime)
@@ -103,14 +108,22 @@ namespace ApiPMU
             string dateStr = targetDate.ToString("ddMMyyyy");
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
-            // Exemple : extraction du programme de la journée
+            // ************************************* //
+            // Chargement du programme de la journée //
+            // ************************************* //
+            //
             var programmeData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(dateStr);
 
-            // Conversion du résultat en chaîne JSON pour le parser.
+            // ************************************* //
+            // Conversion en chaîne JSON pour parser //
+            // ************************************* //
+            //
             string programmeJson = JsonConvert.SerializeObject(programmeData);
 
-            // Utilisation de ProgrammeParser pour transformer le JSON en objet métier.
-            // On récupère la chaîne de connexion depuis le DbContext via un scope.
+            // **************************************************** //
+            // Appel au ProgrammeParser pour extraction des données //
+            // **************************************************** //
+            //
             Programme programmeParsed;
             using (var scope = _serviceProvider.CreateScope())
             {
