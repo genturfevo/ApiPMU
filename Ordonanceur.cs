@@ -148,6 +148,18 @@ namespace ApiPMU
                 _logger.LogInformation("Les données ont été enregistrées dans la base de données.");
             }
 
+            // ********************************************** //
+            // Chargement du détail des courses de la journée //
+            // ********************************************** //
+            //
+            var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, nReunion, nCourse, "participants");
+
+            // ************************************* //
+            // Conversion en chaîne JSON pour parser //
+            // ************************************* //
+            //
+            string courseJson = JsonConvert.SerializeObject(courseData);
+
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
             // Envoi du courriel de récapitulatif
