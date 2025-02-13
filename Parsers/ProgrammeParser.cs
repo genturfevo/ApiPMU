@@ -137,34 +137,57 @@ namespace ApiPMU.Parsers
             try
             {
                 int numCourse = int.TryParse(course["numExterne"]?.ToString(), out int nc) ? nc : 0;
-                string discipline = course["specialite"]?.ToString() switch {
-                    string s when s.Contains("ATTELE") => "ATTELE",
-                    string s when s.Contains("MONTE") => "MONTE",
-                    string s when s.Contains("PLAT") => "PLAT",
-                    string s when s.Contains("HAIES") => "HAIES",
-                    string s when s.Contains("STEEPLE") => "STEEPLE",
-                    string s when s.Contains("CROSS") => "CROSS",
+                // Récupération des valeurs des deux propriétés (ou chaîne vide si null)
+                string specialiteField = course["specialite"]?.ToString() ?? "";
+                string disciplineField = course["discipline"]?.ToString() ?? "";
+                // Combinaison des deux champs (séparés par un espace)
+                string combinedValue = specialiteField + " " + disciplineField;
+                // Utilisation du switch expression pour déterminer la discipline recherchée
+                string discipline = combinedValue switch {
+                    var s when s.Contains("ATTELE") => "ATTELE",
+                    var s when s.Contains("MONTE") => "MONTE",
+                    var s when s.Contains("PLAT") => "PLAT",
+                    var s when s.Contains("HAIE") => "HAIES",
+                    var s when s.Contains("STEEPLE") => "STEEPLE",
+                    var s when s.Contains("CROSS") => "CROSS",
                     _ => string.Empty
-                };
+                    };
                 long timestamp = long.TryParse(course["heureDepart"]?.ToString(), out long ts) ? ts : 0;
                 DateTime dateReunion = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
                 string formattedDepart = dateReunion.ToString("HH:mm");
                 JToken? paris = course["paris"];
-                bool? jCouples = course["typePari"]?.Any(tp => tp.ToString().Contains("COUPLE_PLACE"));
-                bool? jTrio = course["typePari"]?.Any(tp => tp.ToString().Contains("TRIO"));
-                bool? jMulti = course["typePari"]?.Any(tp => tp.ToString().Contains("MULTI"));
-                bool? jQuinte = course["typePari"]?.Any(tp => tp.ToString().Contains("QUINTE"));
+                bool jCouples = paris is JArray parisArrayjC && parisArrayjC.Any(pari => {
+                    string type = pari["typePari"]?.ToString() ?? "";
+                    return type.Contains("COUPLE_PLACE", StringComparison.OrdinalIgnoreCase);
+                });
+                bool jTrio = paris is JArray parisArrayTr && parisArrayTr.Any(pari => {
+                    string type = pari["typePari"]?.ToString() ?? "";
+                    return type.Contains("TRIO", StringComparison.OrdinalIgnoreCase);
+                });
+                bool jMulti = paris is JArray parisArrayjM && parisArrayjM.Any(pari => {
+                    string type = pari["typePari"]?.ToString() ?? "";
+                    return type.Contains("MULTI", StringComparison.OrdinalIgnoreCase);
+                });
+                bool jQuinte = paris is JArray parisArrayjQ && parisArrayjQ.Any(pari => {
+                    string type = pari["typePari"]?.ToString() ?? "";
+                    return type.Contains("QUINTE", StringComparison.OrdinalIgnoreCase);
+                });
                 bool? autostart = course["categorieParticularite"]?.ToString().Contains("AUTOSTART");
                 string cordage = course["corde"]?.ToString() switch {
                     string s when s.Contains("GAUCHE") => "GAUCHE",
                     string s when s.Contains("DROITE") => "DROITE",
                     _ => "GAUCHE"
-                };
+                    };
                 int allocation = int.TryParse(course["montantPrix"]?.ToString(), out int alloc) ? alloc : 0;
-                string typeCourse = CategorieCourseScraping(course["conditions"]?.ToString() ?? string.Empty, allocation);
+                string conditions = course["conditions"]?.ToString() ?? string.Empty;
+                if (conditions.Length > 242)
+                {
+                    conditions = conditions.Substring(0, 240);
+                }
+                string libelle = "Depart " + formattedDepart.Replace(":", "h") + " - " + NormalizeString(conditions);
+                string typeCourse = CategorieCourseScraping(libelle, allocation);
                 int? distance = int.TryParse(course["distance"]?.ToString(), out int dist) ? (int?)dist : null;
                 short? partants = short.TryParse(course["nombreDeclaresPartants"]?.ToString(), out short pt) ? (short?)pt : null;
-                string libelle = ("Depart " + formattedDepart.Replace(":","h") + " - " + course["Libelle"]?.ToString() ?? string.Empty);
                 return new Course {
                     NumGeny = numGeny,
                     NumCourse = (short)numCourse,
@@ -195,11 +218,10 @@ namespace ApiPMU.Parsers
         {
             if (string.IsNullOrEmpty(input))
                 return string.Empty;
-            string result = input.ToUpperInvariant().Replace("'", " ");
+            string result = input.ToUpperInvariant().Replace("'", " ").Replace("-", " ");
             result = RemoveAccents(result);
             return result;
         }
-
         /// <summary>
         /// Supprime les accents d'une chaîne.
         /// </summary>
@@ -216,7 +238,6 @@ namespace ApiPMU.Parsers
             }
             return sb.ToString().Normalize(NormalizationForm.FormC);
         }
-
         /// <summary>
         /// Vérifie en base si le lieu (après normalisation) est présent dans la table dbo.Reunions.
         /// </summary>
@@ -257,12 +278,12 @@ namespace ApiPMU.Parsers
                 return "2";
             if (myLib.Contains("groupe 1") || myLib.Contains("groupe i"))
                 return "1";
-            if (myLib.Contains("listed") && !myLib.Contains("ayant pas"))
-                return "L";
             if (myLib.Contains("course a ") || myLib.Contains("classe 1"))
                 return "A";
             if (myLib.Contains("course b ") || myLib.Contains("classe 2"))
                 return "B";
+            if (myLib.Contains("listed"))
+                return "L";
             if (myLib.Contains("course c ") || myLib.Contains("classe 3"))
                 return "C";
             if (myLib.Contains("course d ") || myLib.Contains("classe 4"))
@@ -283,13 +304,13 @@ namespace ApiPMU.Parsers
             // Si aucun indicateur textuel n'est retrouvé, déterminer la catégorie selon l'allocation.
             if (myAlloc > 0)
             {
-                if (myAlloc >= 35000)
+                if (myAlloc >= 50000)
                     return "A";
-                if (myAlloc >= 25000)
+                if (myAlloc >= 40000)
                     return "B";
-                if (myAlloc >= 20000)
+                if (myAlloc >= 30000)
                     return "C";
-                if (myAlloc >= 15000)
+                if (myAlloc >= 20000)
                     return "D";
                 if (myAlloc >= 10000)
                     return "E";

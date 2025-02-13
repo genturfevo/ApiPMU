@@ -42,8 +42,8 @@ namespace ApiPMU.Models
             // ------------------- Configuration de l'entité Course -------------------
             modelBuilder.Entity<Course>(entity =>
             {
-                entity.ToTable("Course");
-                entity.HasNoKey();
+                entity.ToTable("Courses");
+                entity.HasKey(e => new { e.NumGeny, e.NumCourse });
                 entity.Property(e => e.NumGeny).HasColumnType("nvarchar");  // NumGeny
                 entity.Property(e => e.NumCourse).HasColumnType("smallint");  // NumCourse
                 entity.Property(e => e.Discipline).HasColumnType("nvarchar");  // Discipline
@@ -101,7 +101,7 @@ namespace ApiPMU.Models
             modelBuilder.Entity<Cheval>(entity =>
             {
                 entity.ToTable("Chevaux");
-                entity.HasNoKey();
+                entity.HasKey(e => new { e.NumGeny, e.NumCourse, e.Numero });
                 entity.Property(e => e.NumGeny).HasColumnType("nvarchar(50)");  // NumGeny
                 entity.Property(e => e.NumCourse).HasColumnType("smallint");  // NumCourse
                 entity.Property(e => e.Numero).HasColumnType("smallint");  // Numero
@@ -192,7 +192,7 @@ namespace ApiPMU.Models
             modelBuilder.Entity<EntraineurJokey>(entity =>
             {
                 entity.ToTable("EntraineurJokey");
-                entity.HasNoKey();
+                entity.HasKey(e => new { e.NumGeny, e.Entjok, e.Nom });
                 entity.Property(e => e.NumGeny).HasColumnType("nvarchar(50)");  // NumGeny
                 entity.Property(e => e.Entjok).HasColumnType("nvarchar(50)");  // Entjok
                 entity.Property(e => e.Nom).HasColumnType("nvarchar(50)");  // Nom
@@ -207,7 +207,7 @@ namespace ApiPMU.Models
             modelBuilder.Entity<Performance>(entity =>
             {
                 entity.ToTable("Performances");
-                entity.HasNoKey();
+                entity.HasKey(e => new { e.Nom, e.DatePerf, e.Discipline });
                 entity.Property(e => e.Nom).HasColumnType("nvarchar(50)");  // Nom
                 entity.Property(e => e.DatePerf).HasColumnType("datetime2");  // DatePerf
                 entity.Property(e => e.Lieu).HasColumnType("nvarchar(50)");  // Lieu

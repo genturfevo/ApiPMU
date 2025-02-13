@@ -13,7 +13,7 @@ namespace ApiPMU
     /// <summary>
     /// Service hébergé qui exécute l'extraction des données des API PMU.
     /// En mode normal, il s'exécute tous les jours à 00h01 pour télécharger les données de j+1.
-    /// En mode débogage, si une date forcée est spécifiée dans la configuration, il l'exécute immédiatement.
+    /// En mode débogage, si une date forcée est spécifiée ci-dessous, il l'exécute immédiatement.
     /// À la fin du traitement, un courriel récapitulatif est envoyé.
     /// </summary>
     public class Ordonanceur : BackgroundService
@@ -37,7 +37,7 @@ namespace ApiPMU
             // ************************************************* //
             
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("10022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            _forcedDate = DateTime.ParseExact("11022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
             _forcedDate = null;
 #endif
@@ -48,8 +48,7 @@ namespace ApiPMU
             _logger.LogInformation("Service Ordonanceur démarré.");
 
             // Si une date forcée est spécifiée, l'exécuter immédiatement et sortir.
-            if (_forcedDate.HasValue)
-            {
+            if (_forcedDate.HasValue) {
                 _logger.LogInformation("Exécution forcée pour la date {ForcedDate}.", _forcedDate.Value.ToString("ddMMyyyy"));
                 await ExecuteExtractionForDate(_forcedDate.Value, stoppingToken);
                 _logger.LogInformation("Exécution forcée terminée. Arrêt du service.");
@@ -57,18 +56,15 @@ namespace ApiPMU
             }
 
             // Sinon, exécution planifiée quotidienne
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
+            while (!stoppingToken.IsCancellationRequested) {
+                try {
                     // ********************************************** //
                     // Calcul du prochain horaire d'exécution à 00h01 //
                     // ********************************************** //
                     //
                     DateTime now = DateTime.Now;
                     DateTime nextRunTime = new DateTime(now.Year, now.Month, now.Day, 0, 1, 0);
-                    if (now >= nextRunTime)
-                    {
+                    if (now >= nextRunTime) {
                         nextRunTime = nextRunTime.AddDays(1);
                     }
 
@@ -120,9 +116,9 @@ namespace ApiPMU
             //
             string programmeJson = JsonConvert.SerializeObject(programmeData);
 
-            // **************************************************** //
-            // Appel au ProgrammeParser pour extraction des données //
-            // **************************************************** //
+            // ************************************************************************ //
+            // Appel au ProgrammeParser pour extraction des données réunions et courses //
+            // ************************************************************************ //
             //
             Programme programmeParsed;
             using (var scope = _serviceProvider.CreateScope())
@@ -134,6 +130,23 @@ namespace ApiPMU
             }
             _logger.LogInformation("Programme parsé avec {CountReunions} réunions et {CountCourses} courses.",
                                    programmeParsed.Reunions.Count, programmeParsed.Courses.Count);
+
+            // ********************************************************************** //
+            // Enregistrement des données réunions et courses dans la base de données //
+            // ********************************************************************** //
+            //
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+
+                // Ajout des réunions et courses dans la base de données.
+                // Selon votre logique, vous pouvez vérifier l'existence d'enregistrements pour éviter les doublons.
+                dbContext.Reunions.AddRange(programmeParsed.Reunions);
+                dbContext.Courses.AddRange(programmeParsed.Courses);
+
+                await dbContext.SaveChangesAsync(token);
+                _logger.LogInformation("Les données ont été enregistrées dans la base de données.");
+            }
 
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
