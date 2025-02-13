@@ -3,7 +3,6 @@ using System.Text;
 using Microsoft.Data.SqlClient; // Veillez à installer le package NuGet Microsoft.Data.SqlClient.
 using Newtonsoft.Json.Linq;
 using ApiPMU.Models;
-using System.Diagnostics.CodeAnalysis; // On utilise ici Programme, Reunion et Course.
 
 namespace ApiPMU.Parsers
 {
