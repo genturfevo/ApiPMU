@@ -169,39 +169,37 @@ namespace ApiPMU
                 _logger.LogInformation($"Aucune réunion trouvée pour la date {dateStr}");
                 return;
             }
-            // Supposons que la réunion possède une propriété 'Numero'
-            string nGeny = reunions.NumGeny;
-            int nReunion = reunions.NumReunion;
-            _logger.LogInformation($"Traitement de la réunion n° {nReunion} pour la date {dateStr}");
-
-            var courses = await dbService.GetCoursesByReunionAsync(reunions.NumGeny);
-            if (courses == null || !courses.Any())
+            // Itérer sur chaque réunion pour accéder à ses propriétés (exemple : NumGeny)
+            foreach (var reunion in reunions)
             {
-                _logger.LogInformation($"Aucune course trouvée pour la réunion n° {nReunion}");
-                continue;
+                string numGeny = reunion.NumGeny;
+                int numReunion = reunion.NumReunion;
+                _logger.LogInformation($"Traitement de la réunion n° {numReunion} pour la date {dateStr}");
+
+                var courses = await dbService.GetCoursesByReunionAsync(reunion.NumGeny);
+                if (courses == null || !courses.Any())
+                {
+                    _logger.LogInformation($"Aucune course trouvée pour la réunion n° {numReunion}");
+                    continue;
+                }
+
+                foreach (var course in courses)
+                {
+                    // Supposons que la course possède une propriété 'Numero'
+                    short numCourse = course.NumCourse;
+                    _logger.LogInformation($"Chargement du détail pour la course n° {numCourse} de la réunion n° {numReunion}");
+
+                    // Appel de l'API pour obtenir le détail de la course, avec le paramètre "participants"
+                    var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, numReunion, numCourse, "participants");
+
+                    // Conversion en chaîne JSON
+                    string courseJson = JsonConvert.SerializeObject(courseData);
+
+                    // Enregistrement du détail dans la base
+                    await dbService.SaveCourseChevauxAsync(numGeny, numCourse, 0);
+                    _logger.LogInformation($"Détail de course enregistré pour la course n° {numCourse} de la réunion n° {numReunion}");
+                }
             }
-
-            foreach (var course in courses)
-            {
-                // Supposons que la course possède une propriété 'Numero'
-                short nCourse = course.NumCourse;
-                _logger.LogInformation($"Chargement du détail pour la course n° {nCourse} de la réunion n° {nReunion}");
-
-                // Appel de l'API pour obtenir le détail de la course, avec le paramètre "participants"
-                var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, nReunion, nCourse, "participants");
-
-                // Conversion en chaîne JSON
-                string courseJson = JsonConvert.SerializeObject(courseData);
-
-                // Appel au CourseParser pour extraire les données des chevaux
-                CourseParser parser = new CourseParser(dbService);
-                var detail = parser.ParseCourseChevaux(courseJson, nReunion, nCourse, nGeny);
-
-                // Enregistrement du détail dans la base
-                await dbService.SaveCourseChevauxAsync(nGeny, nCourse, numero);
-                _logger.LogInformation($"Détail de course enregistré pour la course n° {nCourse} de la réunion n° {nReunion}");
-            }
-    
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
             // Envoi du courriel de récapitulatif

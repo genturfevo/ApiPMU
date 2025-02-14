@@ -9,7 +9,7 @@ public class Reunion
 {
     public string NumGeny { get; set; }
 
-    public int? NumReunion { get; set; }
+    public int NumReunion { get; set; }
 
     public string LieuCourse { get; set; }
 
