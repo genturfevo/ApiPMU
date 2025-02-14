@@ -19,7 +19,7 @@ namespace ApiPMU.Services
         /// Récupère un objet depuis le cache ou exécute la fonction asynchrone pour le charger.
         /// Vérifie que la désérialisation ne renvoie pas null.
         /// </summary>
-        private async Task<T> ObtenirDepuisCacheOuAppelerAsync<T>(string cacheKey, Func<Task<T>> fonctionAsync)
+        private static async Task<T> ObtenirDepuisCacheOuAppelerAsync<T>(string cacheKey, Func<Task<T>> fonctionAsync)
         {
             if (CacheRequetes.TryGetValue(cacheKey, out string? jsonData) && jsonData != null)
             {
@@ -76,7 +76,7 @@ namespace ApiPMU.Services
                 }
             }
 
-            return await ObtenirDepuisCacheOuAppelerAsync<T>(dateStr, FonctionAsync);
+            return await ObtenirDepuisCacheOuAppelerAsync(dateStr, FonctionAsync);
         }
 
         public async Task<T> ChargerCourseAsync<T>(string dateStr, int reunion, int course, string detailType)
@@ -97,7 +97,7 @@ namespace ApiPMU.Services
                 }
             }
 
-            return await ObtenirDepuisCacheOuAppelerAsync<T>(cacheKey, FonctionAsync);
+            return await ObtenirDepuisCacheOuAppelerAsync(cacheKey, FonctionAsync);
         }
     }
 }

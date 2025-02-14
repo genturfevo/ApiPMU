@@ -105,7 +105,9 @@ namespace ApiPMU
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
             // ************************************* //
+            // ************************************* //
             // Chargement du programme de la journée //
+            // ************************************* //
             // ************************************* //
             //
             var programmeData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(dateStr);
@@ -145,21 +147,60 @@ namespace ApiPMU
                 dbContext.Courses.AddRange(programmeParsed.Courses);
 
                 await dbContext.SaveChangesAsync(token);
-                _logger.LogInformation("Les données ont été enregistrées dans la base de données.");
+                _logger.LogInformation("Les données Réunions et Courses ont été enregistrées dans la base de données.");
             }
 
-            // ********************************************** //
-            // Chargement du détail des courses de la journée //
-            // ********************************************** //
+            // ******************************************************************** //
+            // ******************************************************************** //
+            // Récupération des réunions et courses enregistrées pour cette journée //
+            // ******************************************************************** //
+            // ******************************************************************** //
             //
-            var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, nReunion, nCourse, "participants");
+            var reunions = await _dbService.GetReunionsByDateAsync(dateStr);
+            if (reunions == null || !reunions.Any())
+            {
+                tracingService.Trace($"Aucune réunion trouvée pour la date {dateStr}");
+            }
+            else
+            {
+                foreach (var reunion in reunions)
+                {
+                    // Par exemple, si votre objet réunion possède une propriété "Numero"
+                    int nReunion = reunion.NumReunion;
+                    tracingService.Trace($"Traitement de la réunion n° {nReunion} pour la date {dateStr}");
 
-            // ************************************* //
-            // Conversion en chaîne JSON pour parser //
-            // ************************************* //
-            //
-            string courseJson = JsonConvert.SerializeObject(courseData);
+                    // Récupération des courses associées à la réunion
+                    var courses = await _dbService.GetCoursesByReunionAsync(reunion.NumGeny);
+                    if (courses == null || !courses.Any())
+                    {
+                        tracingService.Trace($"Aucune course trouvée pour la réunion n° {nReunion}");
+                        continue;
+                    }
 
+                    foreach (var course in courses)
+                    {
+                        // Par exemple, si votre objet course possède une propriété "Numero"
+                        int nCourse = course.NumCourse;
+                        tracingService.Trace($"Chargement du détail pour la course n° {nCourse} de la réunion n° {nReunion}");
+
+                        // ****************************************************************** //
+                        // Chargement du détail des courses de la journée : liste des chevaux //
+                        // ****************************************************************** //
+                        //
+                        var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, nReunion, nCourse, "participants");
+
+                        // ************************************* //
+                        // Conversion en chaîne JSON pour parser //
+                        // ************************************* //
+                        //
+                        string courseJson = JsonConvert.SerializeObject(courseData);
+
+                        // Par exemple, enregistrement du détail dans la base de données
+                        await _dbService.SaveCourseDetailAsync(dateStr, nReunion, nCourse, courseJson);
+                        tracingService.Trace($"Détail de course enregistré pour la course n° {nCourse} de la réunion n° {nReunion}");
+                    }
+                }
+            }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
             // Envoi du courriel de récapitulatif

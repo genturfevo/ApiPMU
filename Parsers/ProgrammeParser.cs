@@ -109,7 +109,6 @@ namespace ApiPMU.Parsers
                 string formattedDateReunion = dateReunion.ToString("yyyy-MM-dd");
                 JToken? hippodrome = reunion["hippodrome"];
                 string libelleCourt = hippodrome?["libelleCourt"]?.ToString() ?? string.Empty;
-                libelleCourt = ReplaceAccentsExplicit(libelleCourt).ToUpper();
                 string normalizedLibelleCourt = NormalizeString(libelleCourt);
                 if (Correspondances.ContainsKey(normalizedLibelleCourt)) { normalizedLibelleCourt = Correspondances[normalizedLibelleCourt]; }
                 if (!IsLieuCoursePresent(normalizedLibelleCourt)) { return null; }
@@ -321,28 +320,6 @@ namespace ApiPMU.Parsers
             {
                 return "G";
             }
-        }
-        /// <summary>
-        /// supprime les accents.
-        /// </summary>
-        /// <param name="myLib">Libellé décrivant la course.</param>
-        /// <returns>Une chaîne sans accent.</returns>
-        public static string ReplaceAccentsExplicit(string myLib)
-        {
-            string accents = "éèêëàâäîïôöùûüçÉÈÊËÀÂÄÎÏÔÖÙÛÜÇ";
-            string replacements = "eeeeaaaiioouuucEEEEAAAIIOOUUUC";
-            StringBuilder result = new StringBuilder();
-
-            foreach (char c in myLib)
-            {
-                int index = accents.IndexOf(c);
-                if (index >= 0)
-                    result.Append(replacements[index]);
-                else
-                    result.Append(c);
-            }
-
-            return result.ToString();
         }
     }
 }
