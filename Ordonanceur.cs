@@ -163,17 +163,18 @@ namespace ApiPMU
                 return;
             }
 
-            var reunions = await dbService.GetReunionsByDateAsync(dateStr);
+            var reunions = await dbService.GetReunionsByDateAsync(targetDate);
             if (reunions == null || !reunions.Any())
             {
                 _logger.LogInformation($"Aucune réunion trouvée pour la date {dateStr}");
                 return;
             }
             // Supposons que la réunion possède une propriété 'Numero'
-            int nReunion = reunion.Numero;
+            string nGeny = reunions.NumGeny;
+            int nReunion = reunions.NumReunion;
             _logger.LogInformation($"Traitement de la réunion n° {nReunion} pour la date {dateStr}");
 
-            var courses = await dbService.GetCoursesByReunionAsync(reunion.Id);
+            var courses = await dbService.GetCoursesByReunionAsync(reunions.NumGeny);
             if (courses == null || !courses.Any())
             {
                 _logger.LogInformation($"Aucune course trouvée pour la réunion n° {nReunion}");
@@ -183,7 +184,7 @@ namespace ApiPMU
             foreach (var course in courses)
             {
                 // Supposons que la course possède une propriété 'Numero'
-                int nCourse = course.Numero;
+                short nCourse = course.NumCourse;
                 _logger.LogInformation($"Chargement du détail pour la course n° {nCourse} de la réunion n° {nReunion}");
 
                 // Appel de l'API pour obtenir le détail de la course, avec le paramètre "participants"
@@ -192,8 +193,12 @@ namespace ApiPMU
                 // Conversion en chaîne JSON
                 string courseJson = JsonConvert.SerializeObject(courseData);
 
+                // Appel au CourseParser pour extraire les données des chevaux
+                CourseParser parser = new CourseParser(dbService);
+                var detail = parser.ParseCourseChevaux(courseJson, nReunion, nCourse, nGeny);
+
                 // Enregistrement du détail dans la base
-                await dbService.SaveCourseDetailAsync(dateStr, nReunion, nCourse, courseJson);
+                await dbService.SaveCourseChevauxAsync(nGeny, nCourse, numero);
                 _logger.LogInformation($"Détail de course enregistré pour la course n° {nCourse} de la réunion n° {nReunion}");
             }
     

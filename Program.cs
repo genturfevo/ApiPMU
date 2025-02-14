@@ -23,6 +23,7 @@ namespace ApiPMU
 
                     // Enregistrement du service d'extraction des API PMU via HttpClientFactory
                     services.AddHttpClient<IApiPmuService, ApiPmuService>();
+                    services.AddScoped<IDbService, DbService>();
 
                     // Enregistrement du service hébergé qui s'exécutera quotidiennement
                     services.AddHostedService<Ordonanceur>();
