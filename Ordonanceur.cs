@@ -156,51 +156,47 @@ namespace ApiPMU
             // ******************************************************************** //
             // ******************************************************************** //
             //
-            var reunions = await _dbService.GetReunionsByDateAsync(dateStr);
+            var dbService = _serviceProvider.GetService<IDbService>();
+            if (dbService == null)
+            {
+                _logger.LogError("Le service de base de données (IDbService) n'est pas disponible.");
+                return;
+            }
+
+            var reunions = await dbService.GetReunionsByDateAsync(dateStr);
             if (reunions == null || !reunions.Any())
             {
-                tracingService.Trace($"Aucune réunion trouvée pour la date {dateStr}");
+                _logger.LogInformation($"Aucune réunion trouvée pour la date {dateStr}");
+                return;
             }
-            else
+            // Supposons que la réunion possède une propriété 'Numero'
+            int nReunion = reunion.Numero;
+            _logger.LogInformation($"Traitement de la réunion n° {nReunion} pour la date {dateStr}");
+
+            var courses = await dbService.GetCoursesByReunionAsync(reunion.Id);
+            if (courses == null || !courses.Any())
             {
-                foreach (var reunion in reunions)
-                {
-                    // Par exemple, si votre objet réunion possède une propriété "Numero"
-                    int nReunion = reunion.NumReunion;
-                    tracingService.Trace($"Traitement de la réunion n° {nReunion} pour la date {dateStr}");
-
-                    // Récupération des courses associées à la réunion
-                    var courses = await _dbService.GetCoursesByReunionAsync(reunion.NumGeny);
-                    if (courses == null || !courses.Any())
-                    {
-                        tracingService.Trace($"Aucune course trouvée pour la réunion n° {nReunion}");
-                        continue;
-                    }
-
-                    foreach (var course in courses)
-                    {
-                        // Par exemple, si votre objet course possède une propriété "Numero"
-                        int nCourse = course.NumCourse;
-                        tracingService.Trace($"Chargement du détail pour la course n° {nCourse} de la réunion n° {nReunion}");
-
-                        // ****************************************************************** //
-                        // Chargement du détail des courses de la journée : liste des chevaux //
-                        // ****************************************************************** //
-                        //
-                        var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, nReunion, nCourse, "participants");
-
-                        // ************************************* //
-                        // Conversion en chaîne JSON pour parser //
-                        // ************************************* //
-                        //
-                        string courseJson = JsonConvert.SerializeObject(courseData);
-
-                        // Par exemple, enregistrement du détail dans la base de données
-                        await _dbService.SaveCourseDetailAsync(dateStr, nReunion, nCourse, courseJson);
-                        tracingService.Trace($"Détail de course enregistré pour la course n° {nCourse} de la réunion n° {nReunion}");
-                    }
-                }
+                _logger.LogInformation($"Aucune course trouvée pour la réunion n° {nReunion}");
+                continue;
             }
+
+            foreach (var course in courses)
+            {
+                // Supposons que la course possède une propriété 'Numero'
+                int nCourse = course.Numero;
+                _logger.LogInformation($"Chargement du détail pour la course n° {nCourse} de la réunion n° {nReunion}");
+
+                // Appel de l'API pour obtenir le détail de la course, avec le paramètre "participants"
+                var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, nReunion, nCourse, "participants");
+
+                // Conversion en chaîne JSON
+                string courseJson = JsonConvert.SerializeObject(courseData);
+
+                // Enregistrement du détail dans la base
+                await dbService.SaveCourseDetailAsync(dateStr, nReunion, nCourse, courseJson);
+                _logger.LogInformation($"Détail de course enregistré pour la course n° {nCourse} de la réunion n° {nReunion}");
+            }
+    
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
             // Envoi du courriel de récapitulatif
