@@ -25,7 +25,6 @@ namespace ApiPMU.Parsers
             { "PARIS LONGCHAMP", "PARISLONGCHAMP" },
             { "PARIS-LONGCHAMP", "PARISLONGCHAMP" }
         };
-
         private readonly string _connectionString;
         private string numGeny= string.Empty;
 

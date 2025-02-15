@@ -104,23 +104,23 @@ namespace ApiPMU
             string dateStr = targetDate.ToString("ddMMyyyy");
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
-            // ************************************* //
-            // ************************************* //
-            // Chargement du programme de la journée //
-            // ************************************* //
-            // ************************************* //
+            // *********************************************** //
+            // *********************************************** //
+            // Api PMU : Chargement du programme de la journée //
+            // *********************************************** //
+            // *********************************************** //
             //
             var programmeData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(dateStr);
 
-            // ************************************* //
-            // Conversion en chaîne JSON pour parser //
-            // ************************************* //
+            // ******************************************** //
+            // JSon : Conversion en chaîne JSON pour parser //
+            // ******************************************** //
             //
             string programmeJson = JsonConvert.SerializeObject(programmeData);
 
-            // ************************************************************************ //
-            // Appel au ProgrammeParser pour extraction des données réunions et courses //
-            // ************************************************************************ //
+            // *************************************************** //
+            // Parser : Extraction des données réunions et courses //
+            // *************************************************** //
             //
             Programme programmeParsed;
             using (var scope = _serviceProvider.CreateScope())
@@ -133,9 +133,9 @@ namespace ApiPMU
             _logger.LogInformation("Programme parsé avec {CountReunions} réunions et {CountCourses} courses.",
                                    programmeParsed.Reunions.Count, programmeParsed.Courses.Count);
 
-            // ********************************************************************** //
-            // Enregistrement des données réunions et courses dans la base de données //
-            // ********************************************************************** //
+            // **************************************************** //
+            // BDD : Enregistrement des données réunions et courses //
+            // **************************************************** //
             //
             using (var scope = _serviceProvider.CreateScope())
             {
@@ -150,11 +150,11 @@ namespace ApiPMU
                 _logger.LogInformation("Les données Réunions et Courses ont été enregistrées dans la base de données.");
             }
 
-            // ******************************************************************** //
-            // ******************************************************************** //
-            // Récupération des réunions et courses enregistrées pour cette journée //
-            // ******************************************************************** //
-            // ******************************************************************** //
+            // ********************************************************************* //
+            // ********************************************************************* //
+            // BDD : Lecture des réunions et courses enregistrées pour cette journée //
+            // ********************************************************************* //
+            // ********************************************************************* //
             //
             var dbService = _serviceProvider.GetService<IDbService>();
             if (dbService == null)
@@ -169,11 +169,14 @@ namespace ApiPMU
                 _logger.LogInformation($"Aucune réunion trouvée pour la date {dateStr}");
                 return;
             }
-            // Itérer sur chaque réunion pour accéder à ses propriétés (exemple : NumGeny)
+            // ************************** //
+            // Itération sur les réunions // 
+            // ************************** //
+            //
             foreach (var reunion in reunions)
             {
                 string numGeny = reunion.NumGeny;
-                int numReunion = reunion.NumReunion;
+                short numReunion = (short)reunion.NumReunion;
                 _logger.LogInformation($"Traitement de la réunion n° {numReunion} pour la date {dateStr}");
 
                 var courses = await dbService.GetCoursesByReunionAsync(reunion.NumGeny);
@@ -182,18 +185,40 @@ namespace ApiPMU
                     _logger.LogInformation($"Aucune course trouvée pour la réunion n° {numReunion}");
                     continue;
                 }
-
+                // ************************* //
+                // Itération sur les courses // 
+                // ************************* //
+                //
                 foreach (var course in courses)
                 {
-                    // Supposons que la course possède une propriété 'Numero'
                     short numCourse = course.NumCourse;
                     _logger.LogInformation($"Chargement du détail pour la course n° {numCourse} de la réunion n° {numReunion}");
 
-                    // Appel de l'API pour obtenir le détail de la course, avec le paramètre "participants"
+                    // ************************************************** //
+                    // Api PMU : Chargement des participants d'une course //
+                    // ************************************************** //
+                    //
                     var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, numReunion, numCourse, "participants");
 
-                    // Conversion en chaîne JSON
+                    // ******************************************** //
+                    // JSon : Conversion en chaîne JSON pour parser //
+                    // ******************************************** //
+                    //
                     string courseJson = JsonConvert.SerializeObject(courseData);
+
+                    // ******************************************** //
+                    // Parser : Extraction des données participants //
+                    // ******************************************** //
+                    //
+                    Participants participantsParsed;
+                    using (var scope = _serviceProvider.CreateScope())
+                    {
+                        var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+                        string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
+                        var parser = new ParticipantsParser(connectionString);
+                        participantsParsed = parser.ParseParticipants(courseJson, numGeny, numReunion, numCourse);
+                    }
+                    _logger.LogInformation("Course parsé avec {CountChevaux}.", participantsParsed.Chevaux.Count);
 
                     // Enregistrement du détail dans la base
                     await dbService.SaveCourseChevauxAsync(numGeny, numCourse, 0);
@@ -202,7 +227,10 @@ namespace ApiPMU
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
-            // Envoi du courriel de récapitulatif
+            // ********************************** //
+            // Envoi du courriel de récapitulatif //
+            // ********************************** //
+            //
             try
             {
                 // Création d'un scope pour obtenir une instance de ApiPMUDbContext
