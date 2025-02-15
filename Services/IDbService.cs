@@ -18,8 +18,8 @@ namespace ApiPMU.Services
         Task<IEnumerable<Course>> GetCoursesByReunionAsync(string NumGeny);
 
         /// <summary>
-        /// Enregistre (ou met à jour) le détail d'une course en stockant le JSON dans la propriété DetailJson.
+        /// Enregistre (ou met à jour) les participants d'une course en passant par la table intermédiaire CourseChevaux.
         /// </summary>
-        Task SaveCourseChevauxAsync(string numGeny, short numCourse, short numero);
+        Task SaveCourseChevauxAsync(string numGeny, short numCourse, ICollection<Cheval> chevaux);
     }
 }

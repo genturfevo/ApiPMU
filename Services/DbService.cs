@@ -28,11 +28,11 @@ namespace ApiPMU.Services
                 .ToListAsync();
         }
 
-        public async Task SaveCourseChevauxAsync(string numGeny, short numCourse, short numero)
+        public async Task SaveCourseChevauxAsync(string numGeny, short numCourse, ICollection<Cheval> chevaux)
         {
             // Recherche du participant de la course à mettre à jour
             var chevaux = await _context.Chevaux
-                .FirstOrDefaultAsync(c => c.NumGeny == numGeny && c.NumCourse == numCourse && c.Numero == numero);
+                .FirstOrDefaultAsync(c => c.NumGeny == numGeny && c.NumCourse == numCourse);
 
             if (chevaux != null)
             {

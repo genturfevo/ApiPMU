@@ -140,7 +140,8 @@ namespace ApiPMU.Parsers
                 // Combinaison des deux champs (séparés par un espace)
                 string combinedValue = specialiteField + " " + disciplineField;
                 // Utilisation du switch expression pour déterminer la discipline recherchée
-                string discipline = combinedValue switch {
+                string discipline = combinedValue switch
+                {
                     var s when s.Contains("ATTELE") => "ATTELE",
                     var s when s.Contains("MONTE") => "MONTE",
                     var s when s.Contains("PLAT") => "PLAT",
@@ -148,33 +149,50 @@ namespace ApiPMU.Parsers
                     var s when s.Contains("STEEPLE") => "STEEPLE",
                     var s when s.Contains("CROSS") => "CROSS",
                     _ => string.Empty
-                    };
+                };
                 long timestamp = long.TryParse(course["heureDepart"]?.ToString(), out long ts) ? ts : 0;
                 DateTime dateReunion = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
                 string formattedDepart = dateReunion.ToString("HH:mm");
                 JToken? paris = course["paris"];
-                bool jCouples = paris is JArray parisArrayjC && parisArrayjC.Any(pari => {
+                bool jCouples = paris is JArray parisArrayjC && parisArrayjC.Any(pari =>
+                {
                     string type = pari["typePari"]?.ToString() ?? "";
                     return type.Contains("COUPLE_PLACE", StringComparison.OrdinalIgnoreCase);
                 });
-                bool jTrio = paris is JArray parisArrayTr && parisArrayTr.Any(pari => {
-                    string type = pari["typePari"]?.ToString() ?? "";
-                    return type.Contains("TRIO", StringComparison.OrdinalIgnoreCase);
-                });
-                bool jMulti = paris is JArray parisArrayjM && parisArrayjM.Any(pari => {
-                    string type = pari["typePari"]?.ToString() ?? "";
-                    return type.Contains("MULTI", StringComparison.OrdinalIgnoreCase);
-                });
-                bool jQuinte = paris is JArray parisArrayjQ && parisArrayjQ.Any(pari => {
-                    string type = pari["typePari"]?.ToString() ?? "";
-                    return type.Contains("QUINTE", StringComparison.OrdinalIgnoreCase);
-                });
+                bool jTrio = false;
+                if (jCouples)
+                {
+                    jTrio = paris is JArray parisArrayTr && parisArrayTr.Any(pari =>
+                    {
+                        string type = pari["typePari"]?.ToString() ?? "";
+                        return type.Contains("TRIO", StringComparison.OrdinalIgnoreCase);
+                    });
+                };
+                bool jMulti = false;
+                if (jCouples)
+                {
+                    jMulti = paris is JArray parisArrayjM && parisArrayjM.Any(pari =>
+                    {
+                        string type = pari["typePari"]?.ToString() ?? "";
+                        return type.Contains("MULTI", StringComparison.OrdinalIgnoreCase);
+                    });
+                };
+                bool jQuinte = false;
+                if (jCouples)
+                {
+                    jQuinte = paris is JArray parisArrayjQ && parisArrayjQ.Any(pari =>
+                    {
+                        string type = pari["typePari"]?.ToString() ?? "";
+                        return type.Contains("QUINTE", StringComparison.OrdinalIgnoreCase);
+                    });
+                };
                 bool? autostart = course["categorieParticularite"]?.ToString().Contains("AUTOSTART");
-                string cordage = course["corde"]?.ToString() switch {
+                string cordage = course["corde"]?.ToString() switch
+                {
                     string s when s.Contains("GAUCHE") => "GAUCHE",
                     string s when s.Contains("DROITE") => "DROITE",
                     _ => "GAUCHE"
-                    };
+                };
                 int allocation = int.TryParse(course["montantPrix"]?.ToString(), out int alloc) ? alloc : 0;
                 string conditions = course["conditions"]?.ToString() ?? string.Empty;
                 if (conditions.Length > 242)
@@ -185,7 +203,8 @@ namespace ApiPMU.Parsers
                 string typeCourse = CategorieCourseScraping(libelle, allocation);
                 int? distance = int.TryParse(course["distance"]?.ToString(), out int dist) ? (int?)dist : null;
                 short? partants = short.TryParse(course["nombreDeclaresPartants"]?.ToString(), out short pt) ? (short?)pt : null;
-                return new Course {
+                return new Course
+                {
                     NumGeny = numGeny,
                     NumCourse = (short)numCourse,
                     Discipline = discipline,

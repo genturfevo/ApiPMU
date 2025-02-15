@@ -37,7 +37,7 @@ namespace ApiPMU
             // ************************************************* //
             
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("11022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            _forcedDate = DateTime.ParseExact("16022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
             _forcedDate = null;
 #endif
@@ -192,6 +192,7 @@ namespace ApiPMU
                 foreach (var course in courses)
                 {
                     short numCourse = course.NumCourse;
+                    string disc = course.Discipline;
                     _logger.LogInformation($"Chargement du détail pour la course n° {numCourse} de la réunion n° {numReunion}");
 
                     // ************************************************** //
@@ -216,12 +217,12 @@ namespace ApiPMU
                         var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
                         string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
                         var parser = new ParticipantsParser(connectionString);
-                        participantsParsed = parser.ParseParticipants(courseJson, numGeny, numReunion, numCourse);
+                        participantsParsed = parser.ParseParticipants(courseJson, numGeny, numReunion, numCourse, disc);
                     }
                     _logger.LogInformation("Course parsé avec {CountChevaux}.", participantsParsed.Chevaux.Count);
 
                     // Enregistrement du détail dans la base
-                    await dbService.SaveCourseChevauxAsync(numGeny, numCourse, 0);
+                    await dbService.SaveCourseChevauxAsync(numGeny, numCourse, participantsParsed.Chevaux);
                     _logger.LogInformation($"Détail de course enregistré pour la course n° {numCourse} de la réunion n° {numReunion}");
                 }
             }
