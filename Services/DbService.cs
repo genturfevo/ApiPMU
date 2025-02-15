@@ -28,27 +28,41 @@ namespace ApiPMU.Services
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// Enregistre la liste des chevaux pour une course donnée.
+        /// La clé commune est NumGeny et pour chaque cheval, la clé se compose de NumGeny, NumCourse et Numero.
+        /// La liste des chevaux est obtenue via ParticipantsParser.ProcessCheval.
+        /// </summary>
+        /// <param name="numGeny">La clé commune pour la réunion/course</param>
+        /// <param name="numCourse">Le numéro de la course</param>
+        /// <param name="chevauxList">La liste des chevaux à enregistrer</param>
         public async Task SaveCourseChevauxAsync(string numGeny, short numCourse, ICollection<Cheval> chevaux)
         {
-            // Recherche du participant de la course à mettre à jour
-            var chevaux = await _context.Chevaux
-                .FirstOrDefaultAsync(c => c.NumGeny == numGeny && c.NumCourse == numCourse);
+            if (chevaux == null)
+                throw new ArgumentNullException(nameof(chevaux));
 
-            if (chevaux != null)
+            // Optionnel : Supprimer les enregistrements existants pour cette course
+            var existingChevaux = await _context.Chevaux
+                .Where(c => c.NumGeny == numGeny && c.NumCourse == numCourse)
+                .ToListAsync();
+
+            if (existingChevaux.Any())
             {
-                chevaux.NumCourse = numCourse;  // On suppose que la propriété NumCourse existe dans Chevaux
+                _context.Chevaux.RemoveRange(existingChevaux);
             }
-            else
+
+            // Pour chaque cheval, affecter les propriétés communes (NumGeny et NumCourse)
+            foreach (var cheval in chevaux)
             {
-                // Si le participant de la course n'existe pas, on peut le créer
-                chevaux = new Cheval
-                {
-                    NumGeny = numGeny,
-                    NumCourse = numCourse,
-                    Numero = numero,
-                };
-                _context.Chevaux.Add(chevaux);
+                cheval.NumGeny = numGeny;
+                cheval.NumCourse = numCourse;
+
+                // Si votre modèle Chevaux contient une propriété Date, décommentez la ligne suivante :
+                // cheval.Date = date;
             }
+
+            // Ajout en base des nouveaux enregistrements
+            await _context.Chevaux.AddRangeAsync(chevaux);
             await _context.SaveChangesAsync();
         }
     }

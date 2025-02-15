@@ -70,7 +70,8 @@ namespace ApiPMU.Parsers
                 short numero = participants?["numPmu"]?.Value<short>() ?? 0;
                 string nom = participants?["nom"]?.ToString() ?? string.Empty;
                 JToken? gainsCarriere = participants?["gainsParticipant"];
-                int gains = (int.TryParse(gainsCarriere?.ToString(), out int g) ? g : 0) / 100;
+                int gains = 0;
+                if (gainsCarriere != null && gainsCarriere["gainsCarriere"] != null && int.TryParse(gainsCarriere["gainsCarriere"].ToString(), out int g)) {gains = g / 100;}
                 string corde = participants?["placeCorde"]?.ToString() ?? "0";
                 string sexe = participants?["sexe"]?.ToString().FirstOrDefault().ToString() ?? "H";
                 string age = participants?["age"]?.ToString() ?? "0";
@@ -97,12 +98,12 @@ namespace ApiPMU.Parsers
                         "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
                         "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
                         "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
-                        _ => string.Empty
+                        _ => "0"
                     };
                 }
                 else
                 {
-                    distpoid = participants?["handicapPoids"]?.Value<Single>() ?? 0;
+                    distpoid = (Single)Math.Floor((participants?["poidsConditionMonte"]?.Value<Single>() ?? 0) / 10);
                     deferre = participants?["handicapValeur"]?.ToString() ?? "0";
                 }
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge

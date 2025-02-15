@@ -12,7 +12,7 @@ namespace ApiPMU.Models
     public class Participants
     {
         public virtual ICollection<Cheval> Chevaux { get; set; } = new List<Cheval>();
-        public virtual ICollection<EntraineurJokey> EntraineurJokeys { get; set; } = new List<EntraineurJokey>();
         public virtual ICollection<Performance> Performances { get; set; } = new List<Performance>();
+        public virtual ICollection<EntraineurJokey> EntraineurJokeys { get; set; } = new List<EntraineurJokey>();
     }
 }
