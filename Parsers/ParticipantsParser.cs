@@ -104,6 +104,7 @@ namespace ApiPMU.Parsers
                 else
                 {
                     distpoid = (Single)Math.Floor((participants?["poidsConditionMonte"]?.Value<Single>() ?? 0) / 10);
+                    if (distpoid == 0) { distpoid = (Single)Math.Floor((participants?["handicapPoids"]?.Value<Single>() ?? 0) / 10); }
                     deferre = participants?["handicapValeur"]?.ToString() ?? "0";
                 }
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge

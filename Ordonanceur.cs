@@ -221,7 +221,10 @@ namespace ApiPMU
                     }
                     _logger.LogInformation("Course parsé avec {CountChevaux}.", participantsParsed.Chevaux.Count);
 
-                    // Enregistrement du détail dans la base
+                    // *************************************************** //
+                    // BDD : Enregistrement des données courses et chevaux //
+                    // *************************************************** //
+                    //
                     await dbService.SaveCourseChevauxAsync(numGeny, numCourse, participantsParsed.Chevaux);
                     _logger.LogInformation($"Détail de course enregistré pour la course n° {numCourse} de la réunion n° {numReunion}");
                 }

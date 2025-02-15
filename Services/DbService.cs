@@ -14,7 +14,6 @@ namespace ApiPMU.Services
 
         public async Task<IEnumerable<Reunion>> GetReunionsByDateAsync(DateTime date)
         {
-            // On suppose que l'entité Reunion possède une propriété Date (de type string ou DateTime converti en string)
             return await _context.Reunions
                 .Where(r => r.DateReunion == date)
                 .ToListAsync();
@@ -22,7 +21,6 @@ namespace ApiPMU.Services
 
         public async Task<IEnumerable<Course>> GetCoursesByReunionAsync(string numGeny)
         {
-            // On suppose que l'entité Course possède une propriété ReunionNumero
             return await _context.Courses
                 .Where(c => c.NumGeny == numGeny)
                 .ToListAsync();
@@ -35,7 +33,7 @@ namespace ApiPMU.Services
         /// </summary>
         /// <param name="numGeny">La clé commune pour la réunion/course</param>
         /// <param name="numCourse">Le numéro de la course</param>
-        /// <param name="chevauxList">La liste des chevaux à enregistrer</param>
+        /// <param name="chevaux">La liste des chevaux à enregistrer</param>
         public async Task SaveCourseChevauxAsync(string numGeny, short numCourse, ICollection<Cheval> chevaux)
         {
             if (chevaux == null)
@@ -56,9 +54,6 @@ namespace ApiPMU.Services
             {
                 cheval.NumGeny = numGeny;
                 cheval.NumCourse = numCourse;
-
-                // Si votre modèle Chevaux contient une propriété Date, décommentez la ligne suivante :
-                // cheval.Date = date;
             }
 
             // Ajout en base des nouveaux enregistrements
