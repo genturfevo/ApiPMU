@@ -18,13 +18,23 @@ namespace ApiPMU.Services
         Task<IEnumerable<Course>> GetCoursesByReunionAsync(string NumGeny);
 
         /// <summary>
-        /// Enregistre (ou met à jour) les participants d'une course en passant par la table intermédiaire CourseChevaux.
+        /// Enregistre (ou met à jour) les reunions de la journée
         /// </summary>
-        Task SaveCourseChevauxAsync(string numGeny, short numCourse, ICollection<Cheval> chevaux);
+        Task SaveOrUpdateReunionAsync(Reunion newReunion, bool updateColumns = true, bool deleteAndRecreate = false);
+
+        /// <summary>
+        /// Enregistre (ou met à jour) les courses d'une reunions
+        /// </summary>
+        Task SaveOrUpdateCourseAsync(Course newCourse, bool updateColumns = true, bool deleteAndRecreate = false);
 
         /// <summary>
         /// Calcule l’âge moyen des chevaux d’une course et met à jour la colonne Age dans la table Course.
         /// </summary>
         Task UpdateCourseAgeMoyenAsync(string numGeny, short numCourse);
+
+        /// <summary>
+        /// Enregistre (ou met à jour) les chevaux d'une course
+        /// </summary>
+        Task SaveOrUpdateChevauxAsync(IEnumerable<Cheval> chevauxList, bool updateColumns = true, bool deleteAndRecreate = false);
     }
 }

@@ -37,7 +37,7 @@ namespace ApiPMU
             // ************************************************* //
             
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("17022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            _forcedDate = DateTime.ParseExact("18022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
             _forcedDate = null;
 #endif
@@ -139,15 +139,21 @@ namespace ApiPMU
             //
             using (var scope = _serviceProvider.CreateScope())
             {
-                var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+                var dbSvc = scope.ServiceProvider.GetRequiredService<IDbService>();
 
-                // Ajout des réunions et courses dans la base de données.
-                // Selon votre logique, vous pouvez vérifier l'existence d'enregistrements pour éviter les doublons.
-                dbContext.Reunions.AddRange(programmeParsed.Reunions);
-                dbContext.Courses.AddRange(programmeParsed.Courses);
+                // Pour chaque réunion parsée, effectue un upsert via DbService.
+                foreach (var reunion in programmeParsed.Reunions)
+                {
+                    await dbSvc.SaveOrUpdateReunionAsync(reunion, updateColumns: true);
+                }
 
-                await dbContext.SaveChangesAsync(token);
-                _logger.LogInformation("Les données Réunions et Courses ont été enregistrées dans la base de données.");
+                // Pour chaque course parsée, effectue un upsert et met à jour l'âge moyen.
+                foreach (var course in programmeParsed.Courses)
+                {
+                    await dbSvc.SaveOrUpdateCourseAsync(course, updateColumns: true);
+                }
+
+                _logger.LogInformation("Les données Réunions et Courses ont été enregistrées dans la base de données via DbService.");
             }
 
             // ********************************************************************* //
@@ -225,7 +231,7 @@ namespace ApiPMU
                     // BDD : Enregistrement des données courses et chevaux //
                     // *************************************************** //
                     //
-                    await dbService.SaveCourseChevauxAsync(numGeny, numCourse, participantsParsed.Chevaux);
+                    await dbService.SaveOrUpdateChevauxAsync(participantsParsed.Chevaux, updateColumns: true);
                     _logger.LogInformation($"Détail de course enregistré pour la course n° {numCourse} de la réunion n° {numReunion}");
 
                     // ********************************************************** //
