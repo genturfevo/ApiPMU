@@ -85,7 +85,7 @@ namespace ApiPMU.Parsers
                 // Colonnes variables selon la discipline
                 //
                 Single distpoid = 0;
-                string deferre = "0";
+                string deferre = string.Empty;
                 if (disc == "ATTELE" || disc == "MONTE")
                 {
                     distpoid = participants?["handicapDistance"]?.Value<Single>() ?? 0;
@@ -98,14 +98,14 @@ namespace ApiPMU.Parsers
                         "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
                         "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
                         "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
-                        _ => "0"
+                        _ => string.Empty
                     };
                 }
                 else
                 {
                     distpoid = (Single)Math.Floor((participants?["poidsConditionMonte"]?.Value<Single>() ?? 0) / 10);
                     if (distpoid == 0) { distpoid = (Single)Math.Floor((participants?["handicapPoids"]?.Value<Single>() ?? 0) / 10); }
-                    deferre = participants?["handicapValeur"]?.ToString() ?? "0";
+                    deferre = participants?["handicapValeur"]?.ToString() ?? string.Empty;
                 }
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
                 string avisEntraineur = participants?["avisEntraineur"]?.ToString() ?? string.Empty;

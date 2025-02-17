@@ -15,6 +15,7 @@ namespace ApiPMU.Parsers
         private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
         {
             { "AGEN LA GARENNE", "AGEN LE PASSAGE" },
+            { "BORELY", "MARSEILLE BORELY" },
             { "CAGNES/MER", "CAGNES SUR MER" },
             { "CHATILLON/CHALARONNE", "CHATILLON SUR CHALARONNE" },
             { "LE LION D'ANGERS", "LE LION D ANGERS" },
@@ -195,7 +196,7 @@ namespace ApiPMU.Parsers
                 };
                 int allocation = int.TryParse(course["montantPrix"]?.ToString(), out int alloc) ? alloc : 0;
                 string conditions = course["conditions"]?.ToString() ?? string.Empty;
-                if (conditions.Length > 242)
+                if (conditions.Length > 240)
                 {
                     conditions = conditions.Substring(0, 240);
                 }

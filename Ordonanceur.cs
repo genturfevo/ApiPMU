@@ -37,7 +37,7 @@ namespace ApiPMU
             // ************************************************* //
             
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("16022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            _forcedDate = DateTime.ParseExact("17022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
             _forcedDate = null;
 #endif
@@ -227,6 +227,13 @@ namespace ApiPMU
                     //
                     await dbService.SaveCourseChevauxAsync(numGeny, numCourse, participantsParsed.Chevaux);
                     _logger.LogInformation($"Détail de course enregistré pour la course n° {numCourse} de la réunion n° {numReunion}");
+
+                    // ********************************************************** //
+                    // Mise à jour de l'âge moyen des participants dans la course //
+                    // ********************************************************** //
+                    //
+                    await dbService.UpdateCourseAgeMoyenAsync(numGeny, numCourse);
+                    _logger.LogInformation($"Age moyen mis à jour pour la course Numero : {numCourse} de la réunion NumGeny : {numGeny}");
                 }
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);

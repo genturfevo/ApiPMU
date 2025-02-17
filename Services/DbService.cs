@@ -60,5 +60,31 @@ namespace ApiPMU.Services
             await _context.Chevaux.AddRangeAsync(chevaux);
             await _context.SaveChangesAsync();
         }
+        public async Task UpdateCourseAgeMoyenAsync(string numGeny, short numCourse)
+        {
+            // Récupérer la liste des chevaux enregistrés pour la course (identifiée par la clé commune numGeny et le numéro de course)
+            var chevaux = await _context.Chevaux
+                .Where(c => c.NumGeny == numGeny && c.NumCourse == numCourse)
+                .ToListAsync();
+
+            if (chevaux == null || !chevaux.Any())
+            {
+                // Rien à faire si aucun cheval n'est trouvé
+                return;
+            }
+
+            // Calcul de l'âge moyen
+            short AgeMoyen = (short)chevaux.Average(c => int.Parse(c.SexAge.Substring(1)));
+
+            // Mise à jour de la course correspondante
+            var course = await _context.Courses
+                .FirstOrDefaultAsync(c => c.NumGeny == numGeny && c.NumCourse == numCourse);
+
+            if (course != null)
+            {
+                course.Age = AgeMoyen;
+                await _context.SaveChangesAsync();
+            }
+        }
     }
 }
