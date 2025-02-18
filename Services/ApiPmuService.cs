@@ -99,5 +99,26 @@ namespace ApiPMU.Services
 
             return await ObtenirDepuisCacheOuAppelerAsync(cacheKey, FonctionAsync);
         }
+
+        public async Task<T> ChargerPerformancesAsync<T>(string dateStr, int reunion, int course, string detailType)
+        {
+            string urlOnline = $"https://online.turfinfo.api.pmu.fr/rest/client/61/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
+            string urlOffline = $"https://offline.turfinfo.api.pmu.fr/rest/client/61/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
+            string cacheKey = $"{dateStr}_R{reunion}_C{course}_{detailType}";
+
+            async Task<T> FonctionAsync()
+            {
+                try
+                {
+                    return await GetJsonFromUrlAsync<T>(urlOnline);
+                }
+                catch (Exception)
+                {
+                    return await GetJsonFromUrlAsync<T>(urlOffline);
+                }
+            }
+
+            return await ObtenirDepuisCacheOuAppelerAsync(cacheKey, FonctionAsync);
+        }
     }
 }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using ApiPMU.Parsers;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
+using System.Collections.Generic;
 
 namespace ApiPMU
 {
@@ -37,7 +38,7 @@ namespace ApiPMU
             // ************************************************* //
             
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("18022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            _forcedDate = DateTime.ParseExact("17022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
             _forcedDate = null;
 #endif
@@ -122,7 +123,7 @@ namespace ApiPMU
             // Parser : Extraction des données réunions et courses //
             // *************************************************** //
             //
-            Programme programmeParsed;
+            ListeProgramme programmeParsed;
             using (var scope = _serviceProvider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
@@ -217,7 +218,7 @@ namespace ApiPMU
                     // Parser : Extraction des données participants //
                     // ******************************************** //
                     //
-                    Participants participantsParsed;
+                    ListeParticipants participantsParsed;
                     using (var scope = _serviceProvider.CreateScope())
                     {
                         var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
@@ -240,6 +241,48 @@ namespace ApiPMU
                     //
                     await dbService.UpdateCourseAgeMoyenAsync(numGeny, numCourse);
                     _logger.LogInformation($"Age moyen mis à jour pour la course Numero : {numCourse} de la réunion NumGeny : {numGeny}");
+
+                    // ************************* //
+                    // Itération sur les chevaux // 
+                    // ************************* //
+                    //
+                    foreach (var cheval in participantsParsed.Chevaux)
+                    {
+                        _logger.LogInformation($"Chargement de l'historique des chevaux pour la course n° {numCourse} de la réunion n° {numReunion}");
+
+                        // ****************************************************************** //
+                        // Api PMU : Chargement de l'historique des participants d'une course //
+                        // ****************************************************************** //
+                        //
+                        var performancesData = await _apiPmuService.ChargerPerformancesAsync<dynamic>(dateStr, numReunion, numCourse, "performances-detaillees/pretty");
+
+                        // ******************************************** //
+                        // JSon : Conversion en chaîne JSON pour parser //
+                        // ******************************************** //
+                        //
+                        string performancesJson = JsonConvert.SerializeObject(performancesData);
+
+                        // ******************************************** //
+                        // Parser : Extraction des données participants //
+                        // ******************************************** //
+                        //
+                        Performance performancesParsed;
+                        using (var scope = _serviceProvider.CreateScope())
+                        {
+                            var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+                            string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
+                            var parser = new PerformancesParser(connectionString);
+                            performancesParsed = parser.ParsePerformances(performancesJson, disc);
+                        }
+                        _logger.LogInformation("Course parsé avec {CountChevaux}.", performancesParsed.Count);
+
+                        // ************************************************* //
+                        // BDD : Enregistrement des performances des chevaux //
+                        // ************************************************* //
+                        //
+                        await dbService.SaveOrUpdatePerformancesAsync(performancesParsed.Performance, updateColumns: true);
+                        _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
+                    }
                 }
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);

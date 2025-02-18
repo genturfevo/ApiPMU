@@ -33,12 +33,12 @@ namespace ApiPMU.Parsers
         /// <param name="json">Chaîne JSON à parser.</param>
         /// <param name="dateStr">Paramètre additionnel (ex. date d'extraction) – non utilisé ici mais conservé pour la signature.</param>
         /// <returns>Un objet Programme contenant les listes de réunions et de courses.</returns>
-        public Participants ParseParticipants(string json, string numGeny, short numReunion, short numCourse, string disc)
+        public ListeParticipants ParseParticipants(string json, string numGeny, short numReunion, short numCourse, string disc)
         {
             if (json == null)
                 throw new ArgumentNullException(nameof(json));
 
-            Participants participantsResult = new Participants();
+            ListeParticipants participantsResult = new ListeParticipants();
             JObject data = JObject.Parse(json);
             JToken? participants = data["participants"];
             if (participants == null)

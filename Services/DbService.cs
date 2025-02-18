@@ -189,5 +189,52 @@ namespace ApiPMU.Services
 
             await _context.SaveChangesAsync();
         }
+        /// <summary>
+        /// Enregistre la liste des chevaux pour une course donnée.
+        /// La clé commune est NumGeny et pour chaque cheval, la clé se compose de NumGeny, NumCourse et Numero.
+        /// La liste des chevaux est obtenue via ParticipantsParser.ProcessCheval.
+        /// </summary>
+        /// <param name="numGeny">La clé commune pour la réunion/course</param>
+        /// <param name="numCourse">Le numéro de la course</param>
+        /// <param name="chevaux">La liste des chevaux à enregistrer</param>
+        public async Task SaveOrUpdateChevauxAsync(Performance newPerformances, bool updateColumns = true, bool deleteAndRecreate = false)
+        {
+            if (newPerformances == null)
+                throw new ArgumentNullException(nameof(newPerformances));
+
+            foreach (var newPerf in newPerformances)
+            {
+                // Recherche d'un cheval existant basé sur la clé composite : NumGeny, NumCourse et Numero
+                var existingCheval = await _context.Chevaux
+                    .FirstOrDefaultAsync(c => c.NumGeny == newPerf.NumGeny
+                                           && c.NumCourse == newPerf.NumCourse
+                                           && c.Numero == newPerf.Numero);
+
+                if (existingCheval != null)
+                {
+                    if (deleteAndRecreate)
+                    {
+                        _context.Chevaux.Remove(existingCheval);
+                        // Vous pouvez appeler SaveChanges ici si vous souhaitez que la suppression soit immédiate, 
+                        // sinon, elle sera appliquée à la fin avec l'appel global.
+                        await _context.Chevaux.AddAsync(newPerf);
+                    }
+                    else if (updateColumns)
+                    {
+                        // Mise à jour sélective des colonnes
+                        existingCheval.Nom = newPerf.Nom;
+                        existingCheval.SexAge = newPerf.SexAge;
+                        // Mettez à jour d'autres colonnes si nécessaire
+                        _context.Chevaux.Update(existingCheval);
+                    }
+                }
+                else
+                {
+                    await _context.Chevaux.AddAsync(newPerf);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
     }
 }

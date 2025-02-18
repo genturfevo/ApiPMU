@@ -36,5 +36,10 @@ namespace ApiPMU.Services
         /// Enregistre (ou met à jour) les chevaux d'une course
         /// </summary>
         Task SaveOrUpdateChevauxAsync(IEnumerable<Cheval> chevauxList, bool updateColumns = true, bool deleteAndRecreate = false);
+
+        /// <summary>
+        /// Enregistre (ou met à jour) les chevaux d'une course
+        /// </summary>
+        Task SaveOrUpdatePerformancesAsync(Performance newPerformances, bool updateColumns = true, bool deleteAndRecreate = false);
     }
 }
