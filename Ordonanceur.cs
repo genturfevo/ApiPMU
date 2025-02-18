@@ -266,7 +266,7 @@ namespace ApiPMU
                         // Parser : Extraction des données participants //
                         // ******************************************** //
                         //
-                        Performance performancesParsed;
+                        ListeParticipants performancesParsed;
                         using (var scope = _serviceProvider.CreateScope())
                         {
                             var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
@@ -274,13 +274,13 @@ namespace ApiPMU
                             var parser = new PerformancesParser(connectionString);
                             performancesParsed = parser.ParsePerformances(performancesJson, disc);
                         }
-                        _logger.LogInformation("Course parsé avec {CountChevaux}.", performancesParsed.Count);
+                        _logger.LogInformation("Course parsé avec {CountChevaux}.", performancesParsed.Performances.Count);
 
                         // ************************************************* //
                         // BDD : Enregistrement des performances des chevaux //
                         // ************************************************* //
                         //
-                        await dbService.SaveOrUpdatePerformancesAsync(performancesParsed.Performance, updateColumns: true);
+                        await dbService.SaveOrUpdatePerformanceAsync(performancesParsed.Performances, updateColumns: true);
                         _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
                     }
                 }

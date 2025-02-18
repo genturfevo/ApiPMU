@@ -197,7 +197,7 @@ namespace ApiPMU.Services
         /// <param name="numGeny">La clé commune pour la réunion/course</param>
         /// <param name="numCourse">Le numéro de la course</param>
         /// <param name="chevaux">La liste des chevaux à enregistrer</param>
-        public async Task SaveOrUpdateChevauxAsync(Performance newPerformances, bool updateColumns = true, bool deleteAndRecreate = false)
+        public async Task SaveOrUpdatePerformanceAsync(IEnumerable<Performance> newPerformances, bool updateColumns = true, bool deleteAndRecreate = false)
         {
             if (newPerformances == null)
                 throw new ArgumentNullException(nameof(newPerformances));
@@ -205,32 +205,32 @@ namespace ApiPMU.Services
             foreach (var newPerf in newPerformances)
             {
                 // Recherche d'un cheval existant basé sur la clé composite : NumGeny, NumCourse et Numero
-                var existingCheval = await _context.Chevaux
-                    .FirstOrDefaultAsync(c => c.NumGeny == newPerf.NumGeny
-                                           && c.NumCourse == newPerf.NumCourse
-                                           && c.Numero == newPerf.Numero);
+                var existingPerf = await _context.Performances
+                    .FirstOrDefaultAsync(c => c.Nom == newPerf.Nom
+                                           && c.DatePerf == newPerf.DatePerf
+                                           && c.Discipline == newPerf.Discipline);
 
-                if (existingCheval != null)
+                if (existingPerf != null)
                 {
                     if (deleteAndRecreate)
                     {
-                        _context.Chevaux.Remove(existingCheval);
+                        _context.Performances.Remove(existingPerf);
                         // Vous pouvez appeler SaveChanges ici si vous souhaitez que la suppression soit immédiate, 
                         // sinon, elle sera appliquée à la fin avec l'appel global.
-                        await _context.Chevaux.AddAsync(newPerf);
+                        await _context.Performances.AddAsync(newPerf);
                     }
                     else if (updateColumns)
                     {
                         // Mise à jour sélective des colonnes
-                        existingCheval.Nom = newPerf.Nom;
-                        existingCheval.SexAge = newPerf.SexAge;
+                        existingPerf.Nom = newPerf.Nom;
+                        existingPerf.DatePerf = newPerf.DatePerf;
                         // Mettez à jour d'autres colonnes si nécessaire
-                        _context.Chevaux.Update(existingCheval);
+                        _context.Performances.Update(existingPerf);
                     }
                 }
                 else
                 {
-                    await _context.Chevaux.AddAsync(newPerf);
+                    await _context.Performances.AddAsync(newPerf);
                 }
             }
 

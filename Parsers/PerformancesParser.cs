@@ -28,7 +28,7 @@ namespace ApiPMU.Parsers
         }
 
         /// <summary>
-        /// Parse l'intégralité du JSON et retourne un objet de 5 Performances par cheval
+        /// Parse l'intégralité du JSON et retourne une liste de 5 Performances pour chaque cheval.
         /// </summary>
         /// <param name="json">Chaîne JSON à parser.</param>
         /// <returns>Un objet Performances contenant la liste de perfs des chevaux.</returns>
@@ -46,41 +46,65 @@ namespace ApiPMU.Parsers
                 return performancesResult;
             }
 
-            foreach (JToken perfToken in perfs)
+            try
             {
-                Performance? perfObj = ProcessPerformances(perfToken, disc);
-                if (perfObj != null)
+                // On s'attend à ce que "coursesCourues" soit un tableau JSON contenant l'historique des courses.
+                var partantsArray = perfs as JArray;
+                if (partantsArray != null)
                 {
-                    performancesResult.Performances.Add(perfObj);
+                    foreach (JToken? partant in partantsArray)
+                    {
+                        string nom = partant?["nomCheval"]?.ToString() ?? string.Empty;
+                        JToken? coursesCourues = partant?["coursesCourues"];
+                        if (coursesCourues != null)
+                        {
+                            foreach (JToken? course in coursesCourues)
+                            {
+                                Performance? perfObj = ProcessPerformances(course, disc, nom);
+                                if (perfObj != null)
+                                {
+                                    performancesResult.Performances.Add(perfObj);
+                                }
+                            }
+                        }
+                    }
                 }
+            }catch
+            {
+                Console.WriteLine("La clé 'coursesCourues' est absente du JSON.");
             }
             return performancesResult;
         }
-
         /// <summary>
         /// Transforme un token JSON en une instance de Reunion.
         /// </summary>
         /// <param name="performances">Token JSON de la réunion.</param>
         /// <returns>Instance de Reunion ou null en cas d'erreur.</returns>
-        private Performance? ProcessPerformances(JToken performances, string disc)
+        private Performance? ProcessPerformances(JToken course, string disc, string nom)
         {
             try
             {
-                DateTime datePerf = performances?["numPmu"]?.Value<DateTime>() ?? DateTime.MinValue;
-                string nom = performances?["nom"]?.ToString() ?? string.Empty;
-                JToken? gainsCarriere = performances?["gainsParticipant"];
-                int gains = 0;
-                if (gainsCarriere != null && gainsCarriere["gainsCarriere"] != null && int.TryParse(gainsCarriere["gainsCarriere"].ToString(), out int g)) { gains = g / 100; }
-                string corde = performances?["placeCorde"]?.ToString() ?? "0";
-                string lieu = performances?["sexe"]?.ToString().FirstOrDefault().ToString() ?? "H";
-                string cordage = performances?["age"]?.ToString() ?? "0";
-                string discipline = performances?["driver"]?.ToString() ?? "NON PARTANT";
-                string typeCourse = performances?["entraineur"]?.ToString() ?? "NON PARTANT";
-                short partants = performances?["nombreCourses"]?.Value<short>() ?? 0;
-                float poid = performances?["nombreVictoires"]?.Value<float>() ?? 0;
-                float cote = performances?["nombreVictoires"]?.Value<float>() ?? 0;
-                int allocation = performances?["nombrePlaces"]?.Value<int>() ?? 0;
-                string place = performances?["nombrePlaces"]? .ToString() ?? string.Empty;
+                // Liste des valeurs autorisées pour les disciplines
+                var disciplinesAutorisees = new HashSet<string> {"ATTELE", "MONTE", "PLAT", "HAIES", "STEEPLE", "CROSS"};
+                // Récupération des valeurs des deux propriétés (ou chaîne vide si null)
+                long timestamp = long.TryParse(course?["date"]?.ToString(), out long ts) ? ts : 0;
+                DateTime datePerf = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
+                string lieu = course?["hippodrome"]?.ToString().ToUpper() ?? "INCONNU";
+                // Récupération et traitement de la discipline
+                string? discipline = course["discipline"] != null ? course["discipline"].ToString().ToUpper() : "INCONNUE";
+                if (discipline.Contains("HAIE")) { discipline = "HAIES"; }
+                discipline = disciplinesAutorisees.Any(d => discipline.Contains(d)) ? disciplinesAutorisees.FirstOrDefault(d => discipline.Contains(d)) : "INCONNUE";
+                int allocation = course?["allocation"]?.Value<int>() ?? 0;
+                short partants = course?["nbParticipants"]?.Value<short>() ?? 0;
+                JToken? participants = course?["participants"]?.FirstOrDefault(p => p["itsHim"]?.Value<bool>() == true);
+                int gains = 0; // A rechercher dans le programme de la journée (DatePerf)
+                string corde = string.IsNullOrEmpty(participants?["corde"]?.ToString()) ? "0" : participants["corde"].ToString();
+                string cordage = "GAUCHE"; // A rechercher dans la liste des hippodromes ou dans le programme de la journée (DatePerf)
+                string typeCourse = "F"; // A rechercher dans le programme de la journée (DatePerf)
+                float poid = participants?["poidsJockey"]?.Value<float?>() ?? 0f;
+                float cote = 0; // A rechercher dans le programme de la journée (DatePerf)
+                JToken? jplace = participants?["place"];
+                string place = jplace?["place"]? .ToString() ?? string.Empty;
                 //
                 // Colonnes variables selon la discipline
                 //
@@ -88,30 +112,33 @@ namespace ApiPMU.Parsers
                 string deferre = string.Empty;
                 if (disc == "ATTELE" || disc == "MONTE")
                 {
-                    distpoid = performances?["handicapDistance"]?.Value<Single>() ?? 0;
-                    deferre = performances?["deferre"]?.ToString() switch
-                    {
-                        "DEFERRE_ANTERIEURS" => "DA",
-                        "DEFERRE_POSTERIEURS" => "DP",
-                        "DEFERRE_ANTERIEURS_POSTERIEURS" => "D4",
-                        "PROTEGE_ANTERIEURS" => "PA",
-                        "PROTEGE_POSTERIEURS" => "PP",
-                        "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
-                        "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
-                        "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
-                        _ => string.Empty
-                    };
+                    distpoid = participants?["distanceParcourue"]?.Value<Single>() ?? 0;
+                    //deferre = participants?["deferre"]?.ToString() switch
+                    //{
+                    //    "DEFERRE_ANTERIEURS" => "DA",
+                    //    "DEFERRE_POSTERIEURS" => "DP",
+                    //    "DEFERRE_ANTERIEURS_POSTERIEURS" => "D4",
+                    //    "PROTEGE_ANTERIEURS" => "PA",
+                    //    "PROTEGE_POSTERIEURS" => "PP",
+                    //    "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
+                    //    "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
+                    //    "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
+                    //    _ => string.Empty
+                    //};
                 }
                 else
                 {
-                    distpoid = (Single)Math.Floor((performances?["poidsConditionMonte"]?.Value<Single>() ?? 0) / 10);
-                    if (distpoid == 0) { distpoid = (Single)Math.Floor((performances?["handicapPoids"]?.Value<Single>() ?? 0) / 10); }
-                    deferre = performances?["handicapValeur"]?.ToString() ?? string.Empty;
+                    distpoid = (Single)Math.Floor((participants?["poidsJockey"]?.Value<Single>() ?? 0) / 10);
+                    if (distpoid == 0) { distpoid = (Single)Math.Floor((participants?["poidsJockey"]?.Value<Single>() ?? 0) / 10); }
+                    //deferre = participants?["handicapValeur"]?.ToString() ?? string.Empty;
                 }
+                string redKDist = participants?["reductionKilometrique"] != null
+                    ? TimeSpan.FromMilliseconds(participants["reductionKilometrique"]?.Value<long>() ?? 0).ToString(@"m\:ss\.f")
+                    : string.Empty;
+                redKDist = redKDist.Replace (".", "::");
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
-                string redKDist = performances?["avisEntraineur"]?.ToString() ?? string.Empty;
-                string avis = performances?["avisEntraineur"]?.ToString() ?? string.Empty;
-                string video = performances?["avisEntraineur"]?.ToString() ?? string.Empty;
+                string avis = string.Empty;
+                string video = string.Empty;
                 return new Performance
                 {
                     Nom = nom,
