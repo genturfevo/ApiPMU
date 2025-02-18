@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient; // Veillez à installer le package NuGet Microso
 using Newtonsoft.Json.Linq;
 using ApiPMU.Models;
 using System.Diagnostics.Eventing.Reader;
+using System.Collections.Generic;
 
 namespace ApiPMU.Parsers
 {
@@ -89,7 +90,8 @@ namespace ApiPMU.Parsers
                 // Récupération des valeurs des deux propriétés (ou chaîne vide si null)
                 long timestamp = long.TryParse(course?["date"]?.ToString(), out long ts) ? ts : 0;
                 DateTime datePerf = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
-                string lieu = course?["hippodrome"]?.ToString().ToUpper() ?? "INCONNU";
+                string libelle = course?["hippodrome"]?.ToString().ToUpper() ?? "INCONNU";
+                string lieu = NormalizeString(libelle);
                 // Récupération et traitement de la discipline
                 string? discipline = course["discipline"] != null ? course["discipline"].ToString().ToUpper() : "INCONNUE";
                 if (discipline.Contains("HAIE")) { discipline = "HAIES"; }
@@ -108,12 +110,12 @@ namespace ApiPMU.Parsers
                 //
                 // Colonnes variables selon la discipline
                 //
-                Single distpoid = 0;
+                Single dist = 0;
                 string deferre = string.Empty;
                 string redKDist = string.Empty;
                 if (disc == "ATTELE" || disc == "MONTE")
                 {
-                    distpoid = participants?["distanceParcourue"]?.Value<Single>() ?? 0;
+                    dist = participants?["distanceParcourue"]?.Value<Single>() ?? 0;
                     //deferre = participants?["deferre"]?.ToString() switch
                     //{
                     //    "DEFERRE_ANTERIEURS" => "DA",
@@ -131,12 +133,6 @@ namespace ApiPMU.Parsers
                         : string.Empty;
                     redKDist = redKDist.Replace(".", "::");
                 }
-                else
-                {
-                    distpoid = (Single)Math.Floor((participants?["poidsJockey"]?.Value<Single>() ?? 0) / 10);
-                    if (distpoid == 0) { distpoid = (Single)Math.Floor((participants?["poidsJockey"]?.Value<Single>() ?? 0) / 10); }
-                    //deferre = participants?["handicapValeur"]?.ToString() ?? string.Empty;
-                }
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
                 string avis = string.Empty;
                 string video = string.Empty;
@@ -145,7 +141,7 @@ namespace ApiPMU.Parsers
                     Nom = nom,
                     DatePerf = datePerf,
                     Lieu = lieu,
-                    Dist = distpoid,
+                    Dist = dist,
                     Gains = gains,
                     Partants = partants,
                     Corde = corde,
@@ -164,6 +160,35 @@ namespace ApiPMU.Parsers
                 };
             }
             catch { return null; }
+        }
+        /// <summary>
+        /// Convertit une chaîne en majuscules, remplace les apostrophes par des espaces et supprime les accents.
+        /// </summary>
+        /// <param name="input">Chaîne à normaliser.</param>
+        /// <returns>Chaîne normalisée (non nulle).</returns>
+        private string NormalizeString(string? input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return string.Empty;
+            string result = input.ToUpperInvariant().Replace("'", " ").Replace("-", " ");
+            result = RemoveAccents(result);
+            return result;
+        }
+        /// <summary>
+        /// Supprime les accents d'une chaîne.
+        /// </summary>
+        /// <param name="text">Texte à traiter.</param>
+        /// <returns>Texte sans accents.</returns>
+        private string RemoveAccents(string text)
+        {
+            string normalizedString = text.Normalize(NormalizationForm.FormD);
+            StringBuilder sb = new StringBuilder();
+            foreach (char c in normalizedString)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                    sb.Append(c);
+            }
+            return sb.ToString().Normalize(NormalizationForm.FormC);
         }
     }
 }
