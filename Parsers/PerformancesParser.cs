@@ -128,10 +128,9 @@ namespace ApiPMU.Parsers
                     //    "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
                     //    _ => string.Empty
                     //};
-                    redKDist = participants?["reductionKilometrique"] != null
-                        ? TimeSpan.FromMilliseconds(participants["reductionKilometrique"]?.Value<long>() ?? 0).ToString(@"m\:ss\.f")
-                        : string.Empty;
-                    redKDist = redKDist.Replace(".", "::");
+                    long centisecondes = participants["reductionKilometrique"]?.Value<long>() ?? 0;
+                    TimeSpan temps = TimeSpan.FromSeconds(centisecondes / 100.0);
+                    redKDist = (temps.ToString(@"m\:ss\.f")).Replace(".", "::");
                 }
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
                 string avis = string.Empty;
