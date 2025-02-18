@@ -104,12 +104,13 @@ namespace ApiPMU.Parsers
                 float poid = participants?["poidsJockey"]?.Value<float?>() ?? 0f;
                 float cote = 0; // A rechercher dans le programme de la journée (DatePerf)
                 JToken? jplace = participants?["place"];
-                string place = jplace?["place"]? .ToString() ?? string.Empty;
+                string place = (jplace?["place"]?.Value<int>() > 0 && jplace?["place"]?.Value<int>() < 10) ? jplace["place"].ToString() : "0";
                 //
                 // Colonnes variables selon la discipline
                 //
                 Single distpoid = 0;
                 string deferre = string.Empty;
+                string redKDist = string.Empty;
                 if (disc == "ATTELE" || disc == "MONTE")
                 {
                     distpoid = participants?["distanceParcourue"]?.Value<Single>() ?? 0;
@@ -125,6 +126,10 @@ namespace ApiPMU.Parsers
                     //    "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
                     //    _ => string.Empty
                     //};
+                    redKDist = participants?["reductionKilometrique"] != null
+                        ? TimeSpan.FromMilliseconds(participants["reductionKilometrique"]?.Value<long>() ?? 0).ToString(@"m\:ss\.f")
+                        : string.Empty;
+                    redKDist = redKDist.Replace(".", "::");
                 }
                 else
                 {
@@ -132,10 +137,6 @@ namespace ApiPMU.Parsers
                     if (distpoid == 0) { distpoid = (Single)Math.Floor((participants?["poidsJockey"]?.Value<Single>() ?? 0) / 10); }
                     //deferre = participants?["handicapValeur"]?.ToString() ?? string.Empty;
                 }
-                string redKDist = participants?["reductionKilometrique"] != null
-                    ? TimeSpan.FromMilliseconds(participants["reductionKilometrique"]?.Value<long>() ?? 0).ToString(@"m\:ss\.f")
-                    : string.Empty;
-                redKDist = redKDist.Replace (".", "::");
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
                 string avis = string.Empty;
                 string video = string.Empty;
