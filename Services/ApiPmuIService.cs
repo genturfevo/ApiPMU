@@ -11,8 +11,13 @@
         Task<T> ChargerProgrammeAsync<T>(string dateStr);
 
         /// <summary>
-        /// Charge les données d'une course spécifique (participants ou performances détaillées).
+        /// Charge les données d'une course spécifique (participants).
         /// </summary>
         Task<T> ChargerCourseAsync<T>(string dateStr, int reunion, int course, string detailType);
+
+        /// <summary>
+        /// Charge les données d'une course spécifique (performances détaillées).
+        /// </summary>
+        Task<T> ChargerPerformancesAsync<T>(string dateStr, int reunion, int course, string detailType);
     }
 }

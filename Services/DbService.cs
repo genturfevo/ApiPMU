@@ -189,5 +189,52 @@ namespace ApiPMU.Services
 
             await _context.SaveChangesAsync();
         }
+        /// <summary>
+        /// Enregistre la liste des chevaux pour une course donnée.
+        /// La clé commune est NumGeny et pour chaque cheval, la clé se compose de NumGeny, NumCourse et Numero.
+        /// La liste des chevaux est obtenue via ParticipantsParser.ProcessCheval.
+        /// </summary>
+        /// <param name="numGeny">La clé commune pour la réunion/course</param>
+        /// <param name="numCourse">Le numéro de la course</param>
+        /// <param name="chevaux">La liste des chevaux à enregistrer</param>
+        public async Task SaveOrUpdatePerformanceAsync(IEnumerable<Performance> newPerformances, bool updateColumns = true, bool deleteAndRecreate = false)
+        {
+            if (newPerformances == null)
+                throw new ArgumentNullException(nameof(newPerformances));
+
+            foreach (var newPerf in newPerformances)
+            {
+                // Recherche d'un cheval existant basé sur la clé composite : NumGeny, NumCourse et Numero
+                var existingPerf = await _context.Performances
+                    .FirstOrDefaultAsync(c => c.Nom == newPerf.Nom
+                                           && c.DatePerf == newPerf.DatePerf
+                                           && c.Discipline == newPerf.Discipline);
+
+                if (existingPerf != null)
+                {
+                    if (deleteAndRecreate)
+                    {
+                        _context.Performances.Remove(existingPerf);
+                        // Vous pouvez appeler SaveChanges ici si vous souhaitez que la suppression soit immédiate, 
+                        // sinon, elle sera appliquée à la fin avec l'appel global.
+                        await _context.Performances.AddAsync(newPerf);
+                    }
+                    else if (updateColumns)
+                    {
+                        // Mise à jour sélective des colonnes
+                        existingPerf.Nom = newPerf.Nom;
+                        existingPerf.DatePerf = newPerf.DatePerf;
+                        // Mettez à jour d'autres colonnes si nécessaire
+                        _context.Performances.Update(existingPerf);
+                    }
+                }
+                else
+                {
+                    await _context.Performances.AddAsync(newPerf);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
     }
 }
