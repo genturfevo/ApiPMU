@@ -13,6 +13,16 @@ namespace ApiPMU.Parsers
     /// </summary>
     public class PerformancesParser
     {
+        // Dictionnaire pour ajuster manuellement certaines correspondances entre hippodromes.
+        private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
+        {
+            { "AGEN LA GARENNE", "AGEN LE PASSAGE" },
+            { "MARSEILLE (A BORELY)", "MARSEILLE BORELY" },
+            { "MARSEILLE (A VIVAUX)", "MARSEILLE VIVAUX" },
+            { "LYON (A LA SOIE)", "LYON LA SOIE" },
+            { "LYON (A PARILLY)", "LYON PARILLY" },
+            { "MAUQUENCHY", "ROUEN MAUQUENCHY" }
+        };
         private readonly string _connectionString;
         private string numGeny= string.Empty;
 
@@ -92,6 +102,7 @@ namespace ApiPMU.Parsers
                 DateTime datePerf = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
                 string libelle = course?["hippodrome"]?.ToString().ToUpper() ?? "INCONNU";
                 string lieu = NormalizeString(libelle);
+                if (Correspondances.ContainsKey(lieu)) { lieu = Correspondances[lieu]; }
                 // Récupération et traitement de la discipline
                 string? discipline = course["discipline"] != null ? course["discipline"].ToString().ToUpper() : "INCONNUE";
                 if (discipline.Contains("HAIE")) { discipline = "HAIES"; }

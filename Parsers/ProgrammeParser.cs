@@ -11,7 +11,7 @@ namespace ApiPMU.Parsers
     /// </summary>
     public class ProgrammeParser
     {
-        // Dictionnaire pour ajuster manuellement certaines correspondances entre libellés.
+        // Dictionnaire pour ajuster manuellement certaines correspondances entre hippodromes.
         private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
         {
             { "AGEN LA GARENNE", "AGEN LE PASSAGE" },
@@ -20,6 +20,7 @@ namespace ApiPMU.Parsers
             { "CHATILLON/CHALARONNE", "CHATILLON SUR CHALARONNE" },
             { "LE LION D'ANGERS", "LE LION D ANGERS" },
             { "LYON-PARILLY", "LYON PARILLY" },
+            { "MAUQUENCHY", "ROUEN MAUQUENCHY" },
             { "MONS (GHLIN)", "MONS" },
             { "PONT CHATEAU", "PONTCHATEAU" },
             { "PONT DE VIVAUX", "MARSEILLE VIVAUX" },
