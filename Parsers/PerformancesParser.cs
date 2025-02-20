@@ -24,7 +24,6 @@ namespace ApiPMU.Parsers
             { "MAUQUENCHY", "ROUEN MAUQUENCHY" }
         };
         private readonly string _connectionString;
-        private string numGeny= string.Empty;
 
         /// <summary>
         /// Constructeur nécessitant la chaîne de connexion (pour la vérification en BDD).
@@ -145,7 +144,7 @@ namespace ApiPMU.Parsers
                 }
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
                 string avis = string.Empty;
-                string video = string.Empty;
+                string video = course?["nomPrix"]?.ToString() ?? string.Empty;
                 return new Performance
                 {
                     Nom = nom,
