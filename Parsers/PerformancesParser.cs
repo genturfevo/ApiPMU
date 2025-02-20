@@ -24,7 +24,6 @@ namespace ApiPMU.Parsers
             { "MAUQUENCHY", "ROUEN MAUQUENCHY" }
         };
         private readonly string _connectionString;
-        private string numGeny= string.Empty;
 
         /// <summary>
         /// Constructeur nécessitant la chaîne de connexion (pour la vérification en BDD).
@@ -80,7 +79,8 @@ namespace ApiPMU.Parsers
                         }
                     }
                 }
-            }catch
+            }
+            catch
             {
                 Console.WriteLine("La clé 'coursesCourues' est absente du JSON.");
             }
@@ -96,7 +96,7 @@ namespace ApiPMU.Parsers
             try
             {
                 // Liste des valeurs autorisées pour les disciplines
-                var disciplinesAutorisees = new HashSet<string> {"ATTELE", "MONTE", "PLAT", "HAIES", "STEEPLE", "CROSS"};
+                var disciplinesAutorisees = new HashSet<string> { "ATTELE", "MONTE", "PLAT", "HAIES", "STEEPLE", "CROSS" };
                 // Récupération des valeurs des deux propriétés (ou chaîne vide si null)
                 long timestamp = long.TryParse(course?["date"]?.ToString(), out long ts) ? ts : 0;
                 DateTime datePerf = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime;
@@ -145,7 +145,7 @@ namespace ApiPMU.Parsers
                 }
                 // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
                 string avis = string.Empty;
-                string video = string.Empty;
+                string video = course?["nomPrix"]?.ToString() ?? string.Empty;
                 return new Performance
                 {
                     Nom = nom,

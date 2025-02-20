@@ -106,9 +106,7 @@ namespace ApiPMU
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
             // *********************************************** //
-            // *********************************************** //
             // Api PMU : Chargement du programme de la journée //
-            // *********************************************** //
             // *********************************************** //
             //
             var programmeData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(dateStr);
@@ -158,9 +156,7 @@ namespace ApiPMU
             }
 
             // ********************************************************************* //
-            // ********************************************************************* //
             // BDD : Lecture des réunions et courses enregistrées pour cette journée //
-            // ********************************************************************* //
             // ********************************************************************* //
             //
             var dbService = _serviceProvider.GetService<IDbService>();
@@ -274,7 +270,63 @@ namespace ApiPMU
                             var parser = new PerformancesParser(connectionString);
                             performancesParsed = parser.ParsePerformances(performancesJson, disc);
                         }
-                        _logger.LogInformation("Course parsé avec {CountChevaux}.", performancesParsed.Performances.Count);
+                        _logger.LogInformation("Performances parsées avec {CountPerformances} entrées.", performancesParsed.Performances.Count);
+
+                        // ************************************************************************** //
+                        // Compléter les performances à partir du programme des dates de performances //
+                        // ************************************************************************** //
+                        //
+                        // Pour chaque performance historique, associer le programme correspondant
+                        foreach (var perf in performancesParsed.Performances)
+                        {
+                            // Utiliser la date propre à la performance pour charger le programme du jour correspondant
+                            string perfDateStr = perf.DatePerf.ToString("ddMMyyyy");
+                            // Video contient temporairement le nom du prix (nomPrix)
+                            // Pour la recherche de la course historique d'un partant
+                            string nomPrixTemp = perf.Video;
+
+                            // ************************************************************************ //
+                            // Api PMU : Charger le programme correspondant à la date de la performance //
+                            // ************************************************************************ //
+                            //
+                            var programmeJsonForPerfData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(perfDateStr);
+
+                            // ******************************************** //
+                            // JSon : Conversion en chaîne JSON pour parser //
+                            // ******************************************** //
+                            //
+                            string programmeJsonForPerfJson = JsonConvert.SerializeObject(programmeJsonForPerfData);
+
+                            // ************************************************ //
+                            // Parser : se caller sur la course de l'historique //
+                            // ************************************************ //
+                            //
+                            var progMatch = programmeJsonForPerfJson.Programmes
+                                .FirstOrDefault(p => p.Libelle.ToUpper().Contains(nomPrixTemp.ToUpper()));
+                            if (progMatch != null)
+                            {
+                                // Mise à jour temporaire du champ Video avec le libellé officiel du programme
+                                perf.Video = progMatch.Libelle;
+
+                                // Construire l'URL pour récupérer les participants pour cette performance
+                                string participantsUrl = $"https://online.turfinfo.api.pmu.fr/rest/client/66/programme/{perfDateStr}/R{progMatch.NumReunion}/C{progMatch.NumExterne}/participants";
+                                string participantsJsonForPerf = await _apiPmuService.GetParticipantsJsonAsync(participantsUrl);
+
+                                var participantsParser = new ParticipantsParser(/* paramètres si nécessaire */);
+                                ListeParticipants listeParticipants = participantsParser.ParseParticipants(participantsJsonForPerf, progMatch.NumGeny, progMatch.NumReunion, progMatch.NumExterne, disc);
+
+                                // Mettre à jour la performance avec les données issues des participants
+                                await _dbService.UpdatePerformanceWithParticipantsAsync(perf, listeParticipants);
+
+                                _logger.LogInformation("Performance mise à jour pour le prix '{NomPrix}' (R{NumReunion}, C{NumExterne}) pour la date {Date}.",
+                                    nomPrixTemp, progMatch.NumReunion, progMatch.NumExterne, perfDateStr);
+                            }
+                            else
+                            {
+                                _logger.LogWarning("Aucune correspondance trouvée dans le programme pour le prix '{NomPrix}' pour la date {Date}.",
+                                    nomPrixTemp, perfDateStr);
+                            }
+                        }
 
                         // ************************************************* //
                         // BDD : Enregistrement des performances des chevaux //
