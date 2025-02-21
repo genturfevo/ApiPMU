@@ -194,9 +194,9 @@ namespace ApiPMU.Services
         /// La clé commune est NumGeny et pour chaque cheval, la clé se compose de NumGeny, NumCourse et Numero.
         /// La liste des chevaux est obtenue via ParticipantsParser.ProcessCheval.
         /// </summary>
-        /// <param name="numGeny">La clé commune pour la réunion/course</param>
-        /// <param name="numCourse">Le numéro de la course</param>
-        /// <param name="chevaux">La liste des chevaux à enregistrer</param>
+        /// <param name="nom">La clé commune pour la réunion/course</param>
+        /// <param name="datePerf">Le numéro de la course</param>
+        /// <param name="discipline">La liste des chevaux à enregistrer</param>
         public async Task SaveOrUpdatePerformanceAsync(IEnumerable<Performance> newPerformances, bool updateColumns = true, bool deleteAndRecreate = false)
         {
             if (newPerformances == null)
@@ -204,7 +204,7 @@ namespace ApiPMU.Services
 
             foreach (var newPerf in newPerformances)
             {
-                // Recherche d'un cheval existant basé sur la clé composite : NumGeny, NumCourse et Numero
+                // Recherche d'une cheval existant basé sur la clé composite : DatePerf, Discipline et Nom
                 var existingPerf = await _context.Performances
                     .FirstOrDefaultAsync(c => c.Nom == newPerf.Nom
                                            && c.DatePerf == newPerf.DatePerf

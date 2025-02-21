@@ -61,8 +61,8 @@ namespace ApiPMU.Services
 
         public async Task<T> ChargerProgrammeAsync<T>(string dateStr)
         {
-            string urlOnline = $"https://online.turfinfo.api.pmu.fr/rest/client/61/programme/{dateStr}";
-            string urlOffline = $"https://offline.turfinfo.api.pmu.fr/rest/client/61/programme/{dateStr}";
+            string urlOnline = $"https://online.turfinfo.api.pmu.fr/rest/client/66/programme/{dateStr}";
+            string urlOffline = $"https://offline.turfinfo.api.pmu.fr/rest/client/66/programme/{dateStr}";
 
             async Task<T> FonctionAsync()
             {
@@ -81,8 +81,8 @@ namespace ApiPMU.Services
 
         public async Task<T> ChargerCourseAsync<T>(string dateStr, int reunion, int course, string detailType)
         {
-            string urlOnline = $"https://online.turfinfo.api.pmu.fr/rest/client/61/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
-            string urlOffline = $"https://offline.turfinfo.api.pmu.fr/rest/client/61/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
+            string urlOnline = $"https://online.turfinfo.api.pmu.fr/rest/client/66/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
+            string urlOffline = $"https://offline.turfinfo.api.pmu.fr/rest/client/66/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
             string cacheKey = $"{dateStr}_R{reunion}_C{course}_{detailType}";
 
             async Task<T> FonctionAsync()
@@ -102,8 +102,8 @@ namespace ApiPMU.Services
 
         public async Task<T> ChargerPerformancesAsync<T>(string dateStr, int reunion, int course, string detailType)
         {
-            string urlOnline = $"https://online.turfinfo.api.pmu.fr/rest/client/61/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
-            string urlOffline = $"https://offline.turfinfo.api.pmu.fr/rest/client/61/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
+            string urlOnline = $"https://online.turfinfo.api.pmu.fr/rest/client/66/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
+            string urlOffline = $"https://offline.turfinfo.api.pmu.fr/rest/client/66/programme/{dateStr}/R{reunion}/C{course}/{detailType}";
             string cacheKey = $"{dateStr}_R{reunion}_C{course}_{detailType}";
 
             async Task<T> FonctionAsync()

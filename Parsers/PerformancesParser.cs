@@ -126,18 +126,6 @@ namespace ApiPMU.Parsers
                 if (disc == "ATTELE" || disc == "MONTE")
                 {
                     dist = participants?["distanceParcourue"]?.Value<Single>() ?? 0;
-                    //deferre = participants?["deferre"]?.ToString() switch
-                    //{
-                    //    "DEFERRE_ANTERIEURS" => "DA",
-                    //    "DEFERRE_POSTERIEURS" => "DP",
-                    //    "DEFERRE_ANTERIEURS_POSTERIEURS" => "D4",
-                    //    "PROTEGE_ANTERIEURS" => "PA",
-                    //    "PROTEGE_POSTERIEURS" => "PP",
-                    //    "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
-                    //    "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
-                    //    "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
-                    //    _ => string.Empty
-                    //};
                     long centisecondes = participants["reductionKilometrique"]?.Value<long>() ?? 0;
                     TimeSpan temps = TimeSpan.FromSeconds(centisecondes / 100.0);
                     redKDist = (temps.ToString(@"m\:ss\.f")).Replace(".", "::");
