@@ -240,15 +240,15 @@ namespace ApiPMU
                     await dbService.UpdateCourseAgeMoyenAsync(numGeny, numCourse);
                     _logger.LogInformation($"Age moyen mis à jour pour la course Numero : {numCourse} de la réunion NumGeny : {numGeny}");
 
-                    // ************************* //
-                    // Itération sur les chevaux // 
-                    // ************************* //
+                    // ************************************** //
+                    // Itération sur les chevaux d'une course // 
+                    // ************************************** //
                     //
                     int cptChA = 0;
                     int cptChK = 0;
                     foreach (var cheval in participantsParsed.Chevaux)
                     {
-                        _logger.LogInformation($"Chargement de l'historique des chevaux pour la course n° {numCourse} de la réunion n° {numReunion}");
+                        _logger.LogInformation($"Chargement de l'historique du cheval R{numReunion}C{numCourse}N{cheval.Numero}-{cheval.Nom}");
 
                         // ****************************************************************** //
                         // Api PMU : Chargement de l'historique des participants d'une course //
