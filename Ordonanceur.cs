@@ -307,7 +307,7 @@ namespace ApiPMU
                         JToken? Jsonreun = Jsonprog["reunions"];
                         if (Jsonreun == null) { Console.WriteLine("La clé 'reunions' est absente du programmeJsonForPerfJson."); }
                         int allocation = 0;
-                        string cordage = "GAUCHE";
+                        string cordage = string.Empty;
                         string conditions = string.Empty;
                         short partants = 0;
                         int distance = 0;
@@ -324,7 +324,11 @@ namespace ApiPMU
                                     {
                                         string? libC = courseToken["libelle"]?.ToString();
                                         string? libL = courseToken["libelleCourt"]?.ToString();
-                                        if (libC.Contains(nomPrixTemp) || libL.Contains(nomPrixTemp))
+                                        //
+                                        // Minimum de 60% de correspondance entre le nom du prix de l'historique et le libelle de la course
+                                        //
+                                        if ((libC != null && ContainsApproximately(libC, nomPrixTemp, 0.6)) ||
+                                            (libL != null && ContainsApproximately(libL, nomPrixTemp, 0.6)))
                                         {
                                             perfR = (short)(short.TryParse(courseToken["numReunion"]?.ToString(), out short nr) ? nr : 0);
                                             perfC = (short)(short.TryParse(courseToken["numExterne"]?.ToString(), out short nc) ? nc : 0);
@@ -333,7 +337,7 @@ namespace ApiPMU
                                             {
                                                 string s when s.Contains("GAUCHE") => "GAUCHE",
                                                 string s when s.Contains("DROITE") => "DROITE",
-                                                _ => "GAUCHE"
+                                                _ => string.Empty
                                             };
                                             conditions = courseToken["conditions"]?.ToString() ?? string.Empty;
                                             partants = (short)(short.TryParse(courseToken["nombreDeclaresPartants"]?.ToString(), out short pa) ? pa : 0);
@@ -481,13 +485,52 @@ namespace ApiPMU
                     string subjectPrefix = "ApiPMU Fin de traitement";
                     string log = "Traitement terminé avec succès."; // Vous pouvez construire ce log en fonction des traitements effectués
                     string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "preslesmu";
-                    await EmailService.SendCompletionEmailAsync(targetDate, flagTRT, subjectPrefix, log, serveur, dbContext);
+                    await EmailService.SendCompletionEmailAsync(targetDate, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erreur lors de l'envoi du courriel récapitulatif.");
             }
+        }
+
+        /// <summary>
+        /// Méthode de calcul de similarité entre 2 chaînes de caractères 
+        /// À la fin du traitement, un courriel récapitulatif est envoyé.
+        /// </summary>
+        /// <param name="chaine">Chaine où s'effectue la recherche.</param>
+        /// <param name="recherche">Chaine recherchée.</param>
+        private bool ContainsApproximately(string chaine, string recherche, double threshold)
+        {
+            if (string.IsNullOrEmpty(recherche))
+                return false;
+
+            // Test direct complet
+            if (chaine.IndexOf(recherche, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            // Vérifier si le dernier mot de 'recherche' est présent dans 'chaine'
+            var words = recherche.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length > 0)
+            {
+                string lastWord = words[words.Length - 1];
+                if (!string.IsNullOrEmpty(lastWord) &&
+                    chaine.IndexOf(lastWord, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            int requiredLength = (int)Math.Ceiling(recherche.Length * threshold);
+
+            // Parcourt toutes les sous-chaînes de "recherche" d'une longueur égale ou supérieure à requiredLength
+            for (int i = 0; i <= recherche.Length - requiredLength; i++)
+            {
+                string sub = recherche.Substring(i, requiredLength);
+                if (chaine.IndexOf(sub, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+            return false;
         }
     }
 }
