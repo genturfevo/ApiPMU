@@ -18,7 +18,11 @@ namespace ApiPMU.Parsers
         {
             { "AGEN LA GARENNE", "AGEN LE PASSAGE" },
             { "MARSEILLE (A BORELY)", "MARSEILLE BORELY" },
+            { "MARSEILLE PONT DE VIVAUX", "MARSEILLE VIVAUX" },
+            { "MARSEILLE PONT DE VIVAUX MIDI", "MARSEILLE VIVAUX" },
             { "MARSEILLE (A VIVAUX)", "MARSEILLE VIVAUX" },
+            { "LA TESTE BASSIN ARCACHON", "LA TESTE DE BUCH" },
+            { "LE MONT SAINT MICHEL PONTORSON", "LE MONT SAINT MICHEL" },
             { "LYON (A LA SOIE)", "LYON LA SOIE" },
             { "LYON (A PARILLY)", "LYON PARILLY" },
             { "MAUQUENCHY", "ROUEN MAUQUENCHY" }
@@ -58,7 +62,6 @@ namespace ApiPMU.Parsers
 
             try
             {
-                // On s'attend à ce que "coursesCourues" soit un tableau JSON contenant l'historique des courses.
                 var partantsArray = perfs as JArray;
                 if (partantsArray != null)
                 {

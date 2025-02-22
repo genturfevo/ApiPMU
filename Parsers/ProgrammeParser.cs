@@ -193,7 +193,7 @@ namespace ApiPMU.Parsers
                 {
                     string s when s.Contains("GAUCHE") => "GAUCHE",
                     string s when s.Contains("DROITE") => "DROITE",
-                    _ => "GAUCHE"
+                    _ => string.Empty
                 };
                 int allocation = int.TryParse(course["montantPrix"]?.ToString(), out int alloc) ? alloc : 0;
                 string conditions = course["conditions"]?.ToString() ?? string.Empty;

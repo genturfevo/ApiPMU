@@ -240,250 +240,226 @@ namespace ApiPMU
                     await dbService.UpdateCourseAgeMoyenAsync(numGeny, numCourse);
                     _logger.LogInformation($"Age moyen mis à jour pour la course Numero : {numCourse} de la réunion NumGeny : {numGeny}");
 
-                    // ************************************** //
-                    // Itération sur les chevaux d'une course // 
-                    // ************************************** //
+                    // ****************************************************************** //
+                    // Api PMU : Chargement de l'historique des participants d'une course //
+                    // ****************************************************************** //
                     //
-                    int cptChA = 0;
-                    int cptChK = 0;
-                    foreach (var cheval in participantsParsed.Chevaux)
-                    {
-                        _logger.LogInformation($"Chargement de l'historique du cheval R{numReunion}C{numCourse}N{cheval.Numero}-{cheval.Nom}");
+                    var performancesData = await _apiPmuService.ChargerPerformancesAsync<dynamic>(dateStr, numReunion, numCourse, "performances-detaillees/pretty");
 
-                        // ****************************************************************** //
-                        // Api PMU : Chargement de l'historique des participants d'une course //
-                        // ****************************************************************** //
+                    // ******************************************** //
+                    // JSon : Conversion en chaîne JSON pour parser //
+                    // ******************************************** //
+                    //
+                    string performancesJson = JsonConvert.SerializeObject(performancesData);
+
+                    // ******************************************** //
+                    // Parser : Extraction des données participants //
+                    // ******************************************** //
+                    //
+                    ListeParticipants performancesParsed;
+                    using (var scope = _serviceProvider.CreateScope())
+                    {
+                        var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+                        string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
+                        var parser = new PerformancesParser(connectionString);
+                        performancesParsed = parser.ParsePerformances(performancesJson, disc);
+                    }
+                    _logger.LogInformation("Performances parsées avec {CountPerformances} entrées.", performancesParsed.Performances.Count);
+
+                    // ************************************************************************** //
+                    // Compléter les performances à partir du programme des dates de performances //
+                    // ************************************************************************** //
+                    //
+                    short perfR;
+                    short perfC;
+                    foreach (var perf in performancesParsed.Performances)
+                    {
+                        _logger.LogInformation($"Historique du cheval R{numReunion}C{numCourse}-{perf.Nom}-{perf.DatePerf}");
+                        // Utiliser la date propre à la performance pour charger le programme du jour correspondant
+                        string perfDateStr = perf.DatePerf.ToString("ddMMyyyy");
+                        // Video contient temporairement le nom du prix (nomPrix)
+                        // Pour la recherche de la course historique d'un partant
+                        string nomPrixTemp = perf.Video;
+                        // Pour la recherche du cheval dans la course
+                        string nomCh = perf.Nom;
+                        perfR = 0;
+                        perfC = 0;
+
+                        // ************************************************************************ //
+                        // Api PMU : Charger le programme correspondant à la date de la performance //
+                        // ************************************************************************ //
                         //
-                        var performancesData = await _apiPmuService.ChargerPerformancesAsync<dynamic>(dateStr, numReunion, numCourse, "performances-detaillees/pretty");
+                        var programmeJsonForPerfData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(perfDateStr);
 
                         // ******************************************** //
                         // JSon : Conversion en chaîne JSON pour parser //
                         // ******************************************** //
                         //
-                        string performancesJson = JsonConvert.SerializeObject(performancesData);
+                        string programmeJsonForPerfJson = JsonConvert.SerializeObject(programmeJsonForPerfData);
 
-                        // ******************************************** //
-                        // Parser : Extraction des données participants //
-                        // ******************************************** //
+                        // ************************************************ //
+                        // Parser : se caller sur la course de l'historique //
+                        // ************************************************ //
                         //
-                        ListeParticipants performancesParsed;
-                        using (var scope = _serviceProvider.CreateScope())
+                        JObject rdata = JObject.Parse(programmeJsonForPerfJson);
+                        JToken? Jsonprog = rdata["programme"];
+                        if (Jsonprog == null) { Console.WriteLine("La clé 'programme' est absente du programmeJsonForPerfJson."); }
+                        JToken? Jsonreun = Jsonprog["reunions"];
+                        if (Jsonreun == null) { Console.WriteLine("La clé 'reunions' est absente du programmeJsonForPerfJson."); }
+                        int allocation = 0;
+                        string cordage = "GAUCHE";
+                        string conditions = string.Empty;
+                        short partants = 0;
+                        int distance = 0;
+
+                        bool found = false;
+                        foreach (JToken reunionToken in Jsonreun)
                         {
-                            var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
-                            string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
-                            var parser = new PerformancesParser(connectionString);
-                            performancesParsed = parser.ParsePerformances(performancesJson, disc);
+                            if (reunionToken["courses"] != null)
+                            {
+                                JToken? Jsoncour = reunionToken["courses"];
+                                if (courses != null)
+                                {
+                                    foreach (JToken courseToken in Jsoncour)
+                                    {
+                                        string? libC = courseToken["libelle"]?.ToString();
+                                        string? libL = courseToken["libelleCourt"]?.ToString();
+                                        if (libC.Contains(nomPrixTemp) || libL.Contains(nomPrixTemp))
+                                        {
+                                            perfR = (short)(short.TryParse(courseToken["numReunion"]?.ToString(), out short nr) ? nr : 0);
+                                            perfC = (short)(short.TryParse(courseToken["numExterne"]?.ToString(), out short nc) ? nc : 0);
+                                            allocation = (int)(int.TryParse(courseToken["montantTotalOffert"]?.ToString(), out int al) ? al : 0);
+                                            cordage = courseToken["corde"]?.ToString() switch
+                                            {
+                                                string s when s.Contains("GAUCHE") => "GAUCHE",
+                                                string s when s.Contains("DROITE") => "DROITE",
+                                                _ => "GAUCHE"
+                                            };
+                                            conditions = courseToken["conditions"]?.ToString() ?? string.Empty;
+                                            partants = (short)(short.TryParse(courseToken["nombreDeclaresPartants"]?.ToString(), out short pa) ? pa : 0);
+                                            distance = (int)(int.TryParse(courseToken["distance"]?.ToString(), out int di) ? di : 0);
+                                            found = true;
+                                            break; // Sort de la boucle interne
+                                        }
+                                    }
+                                }
+                            }
+                            if (found)
+                                break; // Sort de la boucle externe
                         }
-                        _logger.LogInformation("Performances parsées avec {CountPerformances} entrées.", performancesParsed.Performances.Count);
-
-                        // ************************************************************************** //
-                        // Compléter les performances à partir du programme des dates de performances //
-                        // ************************************************************************** //
-                        //
-                        // Pour chaque performance historique, associer le programme correspondant
-                        short perfR;
-                        short perfC;
-                        foreach (var perf in performancesParsed.Performances)
+                        if (found && perfR != 0 && perfC != 0)
                         {
-                            // Utiliser la date propre à la performance pour charger le programme du jour correspondant
-                            string perfDateStr = perf.DatePerf.ToString("ddMMyyyy");
-                            // Video contient temporairement le nom du prix (nomPrix)
-                            // Pour la recherche de la course historique d'un partant
-                            string nomPrixTemp = perf.Video;
-                            // Pour la recherche du cheval dans la course
-                            string nomCh = perf.Nom;
-                            if (nomCh == "KING PATH" && perfDateStr == "18112024")
-                            {
-                                cptChK = cptChK + 1;
-                                _logger.LogInformation("Compteur : {cptChK}", cptChK);
-                                _logger.LogInformation("Nom : {perf.Nom}", perf.Nom);
-                                _logger.LogInformation("Lieu : {perf.Lieu}", perf.Lieu);
-                                _logger.LogInformation("DatePerf : {perf.DatePerf}", perf.DatePerf);
-                            }
-                            if (nomCh == "ACQUASPARTA" && perfDateStr == "28062024")
-                            {
-                                cptChA = cptChA + 1;
-                                _logger.LogInformation("Compteur : {cptChA}", cptChA);
-                                _logger.LogInformation("Nom : {perf.Nom}", perf.Nom);
-                                _logger.LogInformation("Lieu : {perf.Lieu}", perf.Lieu);
-                                _logger.LogInformation("DatePerf : {perf.DatePerf}", perf.DatePerf);
-                            }
-                            perfR = 0;
-                            perfC = 0;
-
-                            // ************************************************************************ //
-                            // Api PMU : Charger le programme correspondant à la date de la performance //
-                            // ************************************************************************ //
+                            // ************************************************** //
+                            // Api PMU : Chargement des participants d'une course //
+                            // ************************************************** //
                             //
-                            var programmeJsonForPerfData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(perfDateStr);
+                            var courseJsonForPerfData = await _apiPmuService.ChargerCourseAsync<dynamic>(perfDateStr, perfR, perfC, "participants");
 
                             // ******************************************** //
                             // JSon : Conversion en chaîne JSON pour parser //
                             // ******************************************** //
                             //
-                            string programmeJsonForPerfJson = JsonConvert.SerializeObject(programmeJsonForPerfData);
+                            string courseJsonForPerfJson = JsonConvert.SerializeObject(courseJsonForPerfData);
 
-                            // ************************************************ //
-                            // Parser : se caller sur la course de l'historique //
-                            // ************************************************ //
+                            // ********************************************* //
+                            // Parser : se caller sur le cheval de la course //
+                            // ********************************************* //
                             //
-                            JObject rdata = JObject.Parse(programmeJsonForPerfJson);
-                            JToken? Jsonprog = rdata["programme"];
-                            if (Jsonprog == null) { Console.WriteLine("La clé 'programme' est absente du programmeJsonForPerfJson."); }
-                            JToken? Jsonreun = Jsonprog["reunions"];
-                            if (Jsonreun == null) { Console.WriteLine("La clé 'reunions' est absente du programmeJsonForPerfJson."); }
-                            int allocation = 0;
-                            string cordage = "GAUCHE";
-                            string conditions = string.Empty;
-                            short partants = 0;
-
-                            bool found = false;
-                            foreach (JToken reunionToken in Jsonreun)
+                            JObject cdata = JObject.Parse(courseJsonForPerfJson);
+                            JToken? Jsondcou = cdata["participants"];
+                            if (Jsondcou != null)
                             {
-                                if (reunionToken["courses"] != null)
+                                foreach (JToken dcourseToken in Jsondcou)
                                 {
-                                    JToken? Jsoncour = reunionToken["courses"];
-                                    if (courses != null)
+                                    string? nom = dcourseToken["nom"]?.ToString();
+                                    if (nomCh == nom)
                                     {
-                                        foreach (JToken courseToken in Jsoncour)
+                                        JToken? gainsCarriere = dcourseToken?["gainsParticipant"];
+                                        int gains = 0;
+                                        if (gainsCarriere != null && gainsCarriere["gainsCarriere"] != null && int.TryParse(gainsCarriere["gainsCarriere"].ToString(), out int g))
                                         {
-                                            string? libC = courseToken["libelle"]?.ToString();
-                                            string? libL = courseToken["libelleCourt"]?.ToString();
-                                            if (libC.Contains(nomPrixTemp) || libL.Contains(nomPrixTemp))
-                                            {
-                                                perfR = (short)(short.TryParse(courseToken["numReunion"]?.ToString(), out short nr) ? nr : 0);
-                                                perfC = (short)(short.TryParse(courseToken["numExterne"]?.ToString(), out short nc) ? nc : 0);
-                                                allocation = (int)(int.TryParse(courseToken["montantTotalOffert"]?.ToString(), out int al) ? al : 0);
-                                                cordage = courseToken["corde"]?.ToString() switch
-                                                {
-                                                    string s when s.Contains("GAUCHE") => "GAUCHE",
-                                                    string s when s.Contains("DROITE") => "DROITE",
-                                                    _ => "GAUCHE"
-                                                };
-                                                conditions = courseToken["conditions"]?.ToString() ?? string.Empty;
-                                                partants = (short)(short.TryParse(courseToken["nombreDeclaresPartants"]?.ToString(), out short pa) ? pa : 0);
-                                                found = true;
-                                                break; // Sort de la boucle interne
-                                            }
+                                            gains = g / 100;
                                         }
-                                    }
-                                }
-                                if (found)
-                                    break; // Sort de la boucle externe
-                            }
-                            if (found && perfR != 0 && perfC != 0)
-                            {
-                                // ************************************************** //
-                                // Api PMU : Chargement des participants d'une course //
-                                // ************************************************** //
-                                //
-                                var courseJsonForPerfData = await _apiPmuService.ChargerCourseAsync<dynamic>(perfDateStr, perfR, perfC, "participants");
-
-                                // ******************************************** //
-                                // JSon : Conversion en chaîne JSON pour parser //
-                                // ******************************************** //
-                                //
-                                string courseJsonForPerfJson = JsonConvert.SerializeObject(courseJsonForPerfData);
-
-                                // ********************************************* //
-                                // Parser : se caller sur le cheval de la course //
-                                // ********************************************* //
-                                //
-                                JObject cdata = JObject.Parse(courseJsonForPerfJson);
-                                JToken? Jsondcou = cdata["participants"];
-                                if (Jsondcou != null)
-                                {
-                                    foreach (JToken dcourseToken in Jsondcou)
-                                    {
-                                        string? nom = dcourseToken["nom"]?.ToString();
-                                        if (nomCh == nom)
+                                        perf.Gains = gains;
+                                        perf.Cordage = cordage;
+                                        perf.Partants = partants;
+                                        perf.Dist = distance;
+                                        string typeCourse = ProgrammeParser.CategorieCourseScraping(conditions, allocation);
+                                        perf.TypeCourse = typeCourse;
+                                        JToken? dCote = dcourseToken["dernierRapportDirect"];
+                                        float cote = dCote?["rapport"]?.Value<float?>() ?? 0f;
+                                        perf.Cote = cote;
+                                        perf.Deferre = string.Empty;
+                                        if (perf.Discipline == "ATTELE" || perf.Discipline == "MONTE")
                                         {
-                                            JToken? gainsCarriere = dcourseToken?["gainsParticipant"];
-                                            int gains = 0;
-                                            if (gainsCarriere != null && gainsCarriere["gainsCarriere"] != null && int.TryParse(gainsCarriere["gainsCarriere"].ToString(), out int g))
+                                            perf.Deferre = dcourseToken?["deferre"]?.ToString() switch
                                             {
-                                                gains = g / 100;
-                                            }
-                                            perf.Gains = gains;
-                                            perf.Cordage = cordage;
-                                            perf.Partants = partants;
-                                            string typeCourse = ProgrammeParser.CategorieCourseScraping(conditions, allocation);
-                                            perf.TypeCourse = typeCourse;
-                                            JToken? dCote = dcourseToken["dernierRapportDirect"];
-                                            float cote = dCote?["rapport"]?.Value<float?>() ?? 0f;
-                                            perf.Cote = cote;
-                                            perf.Deferre = string.Empty;
-                                            if (perf.Discipline == "ATTELE" || perf.Discipline == "MONTE")
-                                            {
-                                                perf.Deferre = dcourseToken?["deferre"]?.ToString() switch
-                                                {
-                                                    "DEFERRE_ANTERIEURS" => "DA",
-                                                    "DEFERRE_POSTERIEURS" => "DP",
-                                                    "DEFERRE_ANTERIEURS_POSTERIEURS" => "D4",
-                                                    "PROTEGE_ANTERIEURS" => "PA",
-                                                    "PROTEGE_POSTERIEURS" => "PP",
-                                                    "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
-                                                    "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
-                                                    "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
-                                                    _ => string.Empty
-                                                };
-                                            }
-                                            else
-                                            {
-                                                perf.Deferre = dcourseToken?["handicapValeur"]?.ToString() ?? string.Empty;
-                                            }
-                                            // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
-                                            string avisEntraineur = dcourseToken?["avisEntraineur"]?.ToString() ?? string.Empty;
-                                            string avis = avisEntraineur switch
-                                            {
-                                                "POSITIF" => "avis_1.png",
-                                                "NEUTRE" => "avis_2.png",
-                                                "NEGATIF" => "avis_3.png",
+                                                "DEFERRE_ANTERIEURS" => "DA",
+                                                "DEFERRE_POSTERIEURS" => "DP",
+                                                "DEFERRE_ANTERIEURS_POSTERIEURS" => "D4",
+                                                "PROTEGE_ANTERIEURS" => "PA",
+                                                "PROTEGE_POSTERIEURS" => "PP",
+                                                "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
+                                                "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
+                                                "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
                                                 _ => string.Empty
                                             };
-                                            perf.Avis = avis;
-                                            break;
                                         }
+                                        else
+                                        {
+                                            perf.Deferre = dcourseToken?["handicapValeur"]?.ToString() ?? string.Empty;
+                                        }
+                                        // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
+                                        string avisEntraineur = dcourseToken?["avisEntraineur"]?.ToString() ?? string.Empty;
+                                        string avis = avisEntraineur switch
+                                        {
+                                            "POSITIF" => "avis_1.png",
+                                            "NEUTRE" => "avis_2.png",
+                                            "NEGATIF" => "avis_3.png",
+                                            _ => string.Empty
+                                        };
+                                        perf.Avis = avis;
+                                        break;
                                     }
-                                }
-                                else
-                                {
-                                    perf.Gains = 0;
-                                    perf.Cordage = "GAUCHE";
-                                    if (allocation > 0)
-                                    {
-                                        perf.TypeCourse = ProgrammeParser.CategorieCourseScraping("", allocation);
-                                    }
-                                    else
-                                    {
-                                        perf.TypeCourse = "G";
-                                    }
-                                    perf.Cote = 0;
-                                    perf.Deferre = string.Empty;
-                                    perf.Avis = string.Empty;
-                                    Console.WriteLine("La clé 'participants' est absente du courseJsonForPerfJson.");
                                 }
                             }
                             else
                             {
                                 perf.Gains = 0;
-                                perf.Cordage = "GAUCHE";
-                                perf.TypeCourse = "G";
+                                perf.Cordage = string.Empty;
+                                if (allocation > 0)
+                                {
+                                    perf.TypeCourse = ProgrammeParser.CategorieCourseScraping("", allocation);
+                                }
+                                else
+                                {
+                                    perf.TypeCourse = "G";
+                                }
                                 perf.Cote = 0;
-                                perf.Partants = 0;
                                 perf.Deferre = string.Empty;
                                 perf.Avis = string.Empty;
-                                Console.WriteLine($"La réunion/course est absente {!found} && numReunion {perfR} && numCourse {perfC}.");
+                                Console.WriteLine("La clé 'participants' est absente du courseJsonForPerfJson.");
                             }
                         }
-
-                        // ************************************************* //
-                        // BDD : Enregistrement des performances des chevaux //
-                        // ************************************************* //
-                        //
-                        await dbService.SaveOrUpdatePerformanceAsync(performancesParsed.Performances, updateColumns: true, deleteAndRecreate: true);
-                        _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
+                        else
+                        {
+                            perf.Gains = 0;
+                            perf.Cordage = string.Empty;
+                            perf.TypeCourse = "G";
+                            perf.Cote = 0;
+                            perf.Partants = 0;
+                            perf.Deferre = string.Empty;
+                            perf.Avis = string.Empty;
+                            Console.WriteLine($"La réunion/course est absente {!found} && numReunion {perfR} && numCourse {perfC}.");
+                        }
                     }
+
+                    // ************************************************* //
+                    // BDD : Enregistrement des performances des chevaux //
+                    // ************************************************* //
+                    //
+                    await dbService.SaveOrUpdatePerformanceAsync(performancesParsed.Performances, updateColumns: true, deleteAndRecreate: true);
+                    _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
                 }
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
