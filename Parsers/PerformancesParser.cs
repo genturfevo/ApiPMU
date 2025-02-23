@@ -116,8 +116,8 @@ namespace ApiPMU.Parsers
                 JToken? participants = course?["participants"]?.FirstOrDefault(p => p["itsHim"]?.Value<bool>() == true);
                 int gains = 0; // A rechercher dans le programme de la journée (DatePerf)
                 string corde = string.IsNullOrEmpty(participants?["corde"]?.ToString()) ? "0" : participants["corde"].ToString();
-                string cordage = "GAUCHE"; // A rechercher dans la liste des hippodromes ou dans le programme de la journée (DatePerf)
-                string typeCourse = "F"; // A rechercher dans le programme de la journée (DatePerf)
+                string cordage = string.Empty; // A rechercher dans la liste des hippodromes ou dans le programme de la journée (DatePerf)
+                string typeCourse = "G"; // A rechercher dans le programme de la journée (DatePerf)
                 float poid = participants?["poidsJockey"]?.Value<float?>() ?? 0f;
                 float cote = 0; // A rechercher dans le programme de la journée (DatePerf)
                 JToken? jplace = participants?["place"];

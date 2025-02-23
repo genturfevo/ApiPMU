@@ -40,7 +40,7 @@ namespace ApiPMU
             // ************************************************* //
             
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("17022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            _forcedDate = DateTime.ParseExact("24022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
             _forcedDate = null;
 #endif
