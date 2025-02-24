@@ -25,20 +25,25 @@ namespace ApiPMU
         private readonly ILogger<Ordonanceur> _logger;
         private readonly DateTime? _forcedDate;
         private readonly IServiceProvider _serviceProvider;
+        private readonly string _connectionString;
 
         public Ordonanceur(IApiPmuService apiPmuService,
                            ILogger<Ordonanceur> logger,
-                           IServiceProvider serviceProvider)
+                           IServiceProvider serviceProvider,
+                           string connectionString)
         {
             _apiPmuService = apiPmuService;
             _logger = logger;
             _serviceProvider = serviceProvider;
-            
+            _connectionString = !string.IsNullOrWhiteSpace(connectionString)
+                ? connectionString
+                : throw new ArgumentException("La chaîne de connexion est obligatoire.", nameof(connectionString));
+
             // ************************************************* //
             //      (utilisable uniquement en mode débogage)     //
             // Paramétrage de la date du programme à télécharger //
             // ************************************************* //
-            
+
 #if DEBUG
             _forcedDate = DateTime.ParseExact("24022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
@@ -129,7 +134,9 @@ namespace ApiPMU
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
                 string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
-                var parser = new ProgrammeParser(connectionString);
+                var parser = new ProgrammeParser(
+                    _serviceProvider.GetRequiredService<ILogger<ProgrammeParser>>(),
+                    _connectionString);
                 programmeParsed = parser.ParseProgramme(programmeJson, dateStr);
             }
             _logger.LogInformation("Programme parsé avec {CountReunions} réunions et {CountCourses} courses.",
@@ -225,7 +232,9 @@ namespace ApiPMU
                     {
                         var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
                         string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
-                        var parser = new ParticipantsParser(connectionString);
+                        var parser = new ParticipantsParser(
+                            _serviceProvider.GetRequiredService<ILogger<ParticipantsParser>>(),
+                            _connectionString);
                         participantsParsed = parser.ParseParticipants(courseJson, numGeny, numReunion, numCourse, disc);
                     }
                     _logger.LogInformation("Course parsé avec {CountChevaux}.", participantsParsed.Chevaux.Count);
@@ -268,7 +277,9 @@ namespace ApiPMU
                     {
                         var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
                         string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
-                        var parser = new PerformancesParser(connectionString);
+                        var parser = new PerformancesParser(
+                            _serviceProvider.GetRequiredService<ILogger<PerformancesParser>>(),
+                            _connectionString);
                         performancesParsed = parser.ParsePerformances(performancesJson, disc);
                     }
                     _logger.LogInformation("Performances parsées avec {CountPerformances} entrées.", performancesParsed.Performances.Count);
@@ -501,7 +512,9 @@ namespace ApiPMU
                     string subjectPrefix = "ApiPMU Fin de traitement";
                     string log = "Traitement terminé avec succès."; // Vous pouvez construire ce log en fonction des traitements effectués
                     string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "preslesmu";
-                    var courrielService = new CourrielService(_logger, connectionString);
+                    var courrielService = new CourrielService(
+                         _serviceProvider.GetRequiredService<ILogger<CourrielService>>(),
+                         _connectionString);
                     await courrielService.SendCompletionEmailAsync(targetDate, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
                 }
             }

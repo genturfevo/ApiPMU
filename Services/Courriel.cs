@@ -14,26 +14,16 @@ namespace ApiPMU.Services
     public class CourrielService
     {
         private readonly ILogger<CourrielService> _logger;
-        private string _connectionString;
+        private readonly string _connectionString;
 
         public CourrielService(ILogger<CourrielService> logger, string connectionString)
         {
-            _logger = logger;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
 
             _connectionString = connectionString;
         }
-
-        public CourrielService(ILogger<Ordonanceur> logger, object connectionString)
-        {
-            Logger = logger;
-            ConnectionString = connectionString;
-        }
-
-        public ILogger<Ordonanceur> Logger { get; }
-        public object ConnectionString { get; }
-
         /// <summary>
         /// Envoie un courriel de récapitulatif pour la date spécifiée.
         /// </summary>

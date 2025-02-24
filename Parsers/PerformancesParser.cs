@@ -16,14 +16,13 @@ namespace ApiPMU.Parsers
     {
         private readonly ILogger<PerformancesParser> _logger;
         private readonly string _connectionString;
-        private string numGeny = string.Empty;
+
         public PerformancesParser(ILogger<PerformancesParser> logger, string connectionString)
         {
-            _logger = logger;
-            if (string.IsNullOrWhiteSpace(connectionString))
-                throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
-
-            _connectionString = connectionString;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _connectionString = !string.IsNullOrWhiteSpace(connectionString)
+                ? connectionString
+                : throw new ArgumentException("La chaîne de connexion est obligatoire.", nameof(connectionString));
         }
 
         // Dictionnaire pour ajuster manuellement certaines correspondances entre hippodromes.

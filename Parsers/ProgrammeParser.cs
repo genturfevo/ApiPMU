@@ -14,15 +14,6 @@ namespace ApiPMU.Parsers
     {
         private readonly ILogger<ProgrammeParser> _logger;
         private readonly string _connectionString;
-        private string numGeny = string.Empty;
-        public ProgrammeParser(ILogger<ProgrammeParser> logger, string connectionString)
-        {
-            _logger = logger;
-            if (string.IsNullOrWhiteSpace(connectionString))
-                throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
-
-            _connectionString = connectionString;
-        }
 
         // Dictionnaire pour ajuster manuellement certaines correspondances entre hippodromes.
         private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
@@ -43,6 +34,15 @@ namespace ApiPMU.Parsers
             { "PARIS-LONGCHAMP", "PARISLONGCHAMP" }
         };
 
+        private string numGeny = string.Empty;
+
+        public ProgrammeParser(ILogger<ProgrammeParser> logger, string connectionString)
+        {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _connectionString = !string.IsNullOrWhiteSpace(connectionString)
+                ? connectionString
+                : throw new ArgumentException("La chaîne de connexion est obligatoire.", nameof(connectionString));
+        }
         /// <summary>
         /// Parse l'intégralité du JSON et retourne un objet Programme regroupant réunions et courses.
         /// </summary>
