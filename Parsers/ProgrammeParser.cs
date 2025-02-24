@@ -1,8 +1,9 @@
 ﻿using System.Globalization;
 using System.Text;
-using Microsoft.Data.SqlClient; // Veillez à installer le package NuGet Microsoft.Data.SqlClient.
+using Microsoft.Data.SqlClient;
 using Newtonsoft.Json.Linq;
 using ApiPMU.Models;
+using Microsoft.Extensions.Logging;
 
 namespace ApiPMU.Parsers
 {
@@ -11,6 +12,18 @@ namespace ApiPMU.Parsers
     /// </summary>
     public class ProgrammeParser
     {
+        private readonly ILogger<ProgrammeParser> _logger;
+        private readonly string _connectionString;
+        private string numGeny = string.Empty;
+        public ProgrammeParser(ILogger<ProgrammeParser> logger, string connectionString)
+        {
+            _logger = logger;
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
+
+            _connectionString = connectionString;
+        }
+
         // Dictionnaire pour ajuster manuellement certaines correspondances entre hippodromes.
         private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
         {
@@ -29,20 +42,6 @@ namespace ApiPMU.Parsers
             { "PARIS LONGCHAMP", "PARISLONGCHAMP" },
             { "PARIS-LONGCHAMP", "PARISLONGCHAMP" }
         };
-        private readonly string _connectionString;
-        private string numGeny= string.Empty;
-
-        /// <summary>
-        /// Constructeur nécessitant la chaîne de connexion (pour la vérification en BDD).
-        /// </summary>
-        /// <param name="connectionString">Chaîne de connexion SQL.</param>
-        public ProgrammeParser(string connectionString)
-        {
-            if (string.IsNullOrWhiteSpace(connectionString))
-                throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
-
-            _connectionString = connectionString;
-        }
 
         /// <summary>
         /// Parse l'intégralité du JSON et retourne un objet Programme regroupant réunions et courses.
@@ -60,13 +59,13 @@ namespace ApiPMU.Parsers
             JToken? prog = data["programme"];
             if (prog == null)
             {
-                Console.WriteLine("La clé 'programme' est absente du JSON.");
+                _logger.LogError("La clé 'programme' est absente du JSON.");
                 return programmeResult;
             }
             JToken? reunions = prog["reunions"];
             if (reunions == null)
             {
-                Console.WriteLine("La clé 'reunions' est absente du JSON.");
+                _logger.LogError("La clé 'reunions' est absente du JSON.");
                 return programmeResult;
             }
 
@@ -82,7 +81,6 @@ namespace ApiPMU.Parsers
                     {
                         foreach (JToken courseToken in courses)
                         {
-                            // Construction d'un identifiant course sous forme de chaîne.
                             Course? courseObj = ProcessCourse(courseToken);
                             if (courseObj != null)
                             {
@@ -104,7 +102,6 @@ namespace ApiPMU.Parsers
         {
             try
             {
-                // Conversion numérique avec int.TryParse.
                 int numReunion = int.TryParse(reunion["numOfficiel"]?.ToString(), out int nr) ? nr : 0;
                 numGeny = numGeny + numReunion;
                 long timestamp = long.TryParse(reunion["dateReunion"]?.ToString(), out long ts) ? ts : 0;
@@ -113,9 +110,16 @@ namespace ApiPMU.Parsers
                 JToken? hippodrome = reunion["hippodrome"];
                 string libelleCourt = hippodrome?["libelleCourt"]?.ToString() ?? string.Empty;
                 string normalizedLibelleCourt = NormalizeString(libelleCourt);
-                if (Correspondances.ContainsKey(normalizedLibelleCourt)) { normalizedLibelleCourt = Correspondances[normalizedLibelleCourt]; }
-                if (!IsLieuCoursePresent(normalizedLibelleCourt)) { return null; }
-                return new Reunion {
+                if (Correspondances.ContainsKey(normalizedLibelleCourt))
+                {
+                    normalizedLibelleCourt = Correspondances[normalizedLibelleCourt];
+                }
+                if (!IsLieuCoursePresent(normalizedLibelleCourt))
+                {
+                    return null;
+                }
+                return new Reunion
+                {
                     NumGeny = numGeny,
                     NumReunion = numReunion,
                     LieuCourse = normalizedLibelleCourt,
@@ -123,27 +127,26 @@ namespace ApiPMU.Parsers
                     DateModif = DateTime.Now
                 };
             }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du traitement de la réunion.");
+                return null;
+            }
         }
 
         /// <summary>
         /// Transforme un token JSON en une instance de Course.
         /// </summary>
         /// <param name="course">Token JSON de la course.</param>
-        /// <param name="numGeny">Identifiant de course généré (sous forme de chaîne).</param>
-        /// <param name="reunionDateModif">Date de modification de la réunion (utilisée par défaut si absente dans la course).</param>
         /// <returns>Instance de Course ou null en cas d'erreur.</returns>
         private Course? ProcessCourse(JToken course)
         {
             try
             {
                 int numCourse = int.TryParse(course["numExterne"]?.ToString(), out int nc) ? nc : 0;
-                // Récupération des valeurs des deux propriétés (ou chaîne vide si null)
                 string specialiteField = course["specialite"]?.ToString() ?? "";
                 string disciplineField = course["discipline"]?.ToString() ?? "";
-                // Combinaison des deux champs (séparés par un espace)
                 string combinedValue = specialiteField + " " + disciplineField;
-                // Utilisation du switch expression pour déterminer la discipline recherchée
                 string discipline = combinedValue switch
                 {
                     var s when s.Contains("ATTELE") => "ATTELE",
@@ -171,7 +174,7 @@ namespace ApiPMU.Parsers
                         string type = pari["typePari"]?.ToString() ?? "";
                         return type.Contains("TRIO", StringComparison.OrdinalIgnoreCase);
                     });
-                };
+                }
                 bool jMulti = false;
                 if (jCouples)
                 {
@@ -180,7 +183,7 @@ namespace ApiPMU.Parsers
                         string type = pari["typePari"]?.ToString() ?? "";
                         return type.Contains("MULTI", StringComparison.OrdinalIgnoreCase);
                     });
-                };
+                }
                 bool jQuinte = false;
                 if (jCouples)
                 {
@@ -189,7 +192,7 @@ namespace ApiPMU.Parsers
                         string type = pari["typePari"]?.ToString() ?? "";
                         return type.Contains("QUINTE", StringComparison.OrdinalIgnoreCase);
                     });
-                };
+                }
                 bool? autostart = course["categorieParticularite"]?.ToString().Contains("AUTOSTART");
                 string cordage = course["corde"]?.ToString() switch
                 {
@@ -226,14 +229,13 @@ namespace ApiPMU.Parsers
                     DateModif = DateTime.Now
                 };
             }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du traitement de la course.");
+                return null;
+            }
         }
 
-        /// <summary>
-        /// Convertit une chaîne en majuscules, remplace les apostrophes par des espaces et supprime les accents.
-        /// </summary>
-        /// <param name="input">Chaîne à normaliser.</param>
-        /// <returns>Chaîne normalisée (non nulle).</returns>
         private string NormalizeString(string? input)
         {
             if (string.IsNullOrEmpty(input))
@@ -242,11 +244,7 @@ namespace ApiPMU.Parsers
             result = RemoveAccents(result);
             return result;
         }
-        /// <summary>
-        /// Supprime les accents d'une chaîne.
-        /// </summary>
-        /// <param name="text">Texte à traiter.</param>
-        /// <returns>Texte sans accents.</returns>
+
         private string RemoveAccents(string text)
         {
             string normalizedString = text.Normalize(NormalizationForm.FormD);
@@ -258,6 +256,7 @@ namespace ApiPMU.Parsers
             }
             return sb.ToString().Normalize(NormalizationForm.FormC);
         }
+
         /// <summary>
         /// Vérifie en base si le lieu (après normalisation) est présent dans la table dbo.Reunions.
         /// </summary>
@@ -266,17 +265,26 @@ namespace ApiPMU.Parsers
         private bool IsLieuCoursePresent(string lieuCourse)
         {
             string query = "SELECT COUNT(*) FROM dbo.Reunions WHERE UPPER(REPLACE(LieuCourse, '''', ' ')) = @LieuCourse";
-            using (SqlConnection connection = new SqlConnection(_connectionString))
+            try
             {
-                connection.Open();
-                using (SqlCommand command = new SqlCommand(query, connection))
+                using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
-                    command.Parameters.AddWithValue("@LieuCourse", lieuCourse);
-                    int count = (int)command.ExecuteScalar();
-                    return count > 0;
+                    connection.Open();
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@LieuCourse", lieuCourse);
+                        int count = (int)command.ExecuteScalar();
+                        return count > 0;
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la vérification du lieu de course dans la base de données.");
+                return false;
+            }
         }
+
         /// <summary>
         /// Détermine la catégorie d'une course en fonction d'un libellé et du montant de l'allocation.
         /// </summary>
@@ -321,7 +329,6 @@ namespace ApiPMU.Parsers
             if (myLib.Contains("amateur") || myLib.Contains("gentlemen-riders") || myLib.Contains("cavalières"))
                 return "X";
 
-            // Si aucun indicateur textuel n'est retrouvé, déterminer la catégorie selon l'allocation.
             if (myAlloc > 0)
             {
                 if (myAlloc >= 50000)

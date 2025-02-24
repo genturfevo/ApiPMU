@@ -2,15 +2,38 @@
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
-using ApiPMU.Models; // Assurez-vous que le namespace correspond à celui de votre DbContext et de vos entités
+using ApiPMU.Models;
+using Microsoft.Extensions.Logging;
+using ApiPMU.Parsers;
 
 namespace ApiPMU.Services
 {
     /// <summary>
     /// Service d'envoi d'email pour notifier la fin du téléchargement des données.
     /// </summary>
-    public static class EmailService
+    public class CourrielService
     {
+        private readonly ILogger<CourrielService> _logger;
+        private string _connectionString;
+
+        public CourrielService(ILogger<CourrielService> logger, string connectionString)
+        {
+            _logger = logger;
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
+
+            _connectionString = connectionString;
+        }
+
+        public CourrielService(ILogger<Ordonanceur> logger, object connectionString)
+        {
+            Logger = logger;
+            ConnectionString = connectionString;
+        }
+
+        public ILogger<Ordonanceur> Logger { get; }
+        public object ConnectionString { get; }
+
         /// <summary>
         /// Envoie un courriel de récapitulatif pour la date spécifiée.
         /// </summary>
@@ -20,7 +43,7 @@ namespace ApiPMU.Services
         /// <param name="log">Le log de traitement à inclure dans le corps du courriel.</param>
         /// <param name="serveur">Le préfixe du serveur (utilisé pour former l'adresse expéditeur).</param>
         /// <param name="dbContext">Le DbContext pour accéder aux tables Reunions et Courses.</param>
-        public static async Task SendCompletionEmailAsync(DateTime dateProno, bool flagTRT, string subjectPrefix, string log, string serveur, ApiPMUDbContext dbContext)
+        public async Task SendCompletionEmailAsync(DateTime dateProno, bool flagTRT, string subjectPrefix, string log, string serveur, ApiPMUDbContext dbContext)
         {
             int retry = 1;
             while (true)
@@ -33,7 +56,7 @@ namespace ApiPMU.Services
                     message.To.Add(new MailboxAddress("", "tchicken@gmail.com"));
 
                     // Construction du sujet
-                    message.Subject = subjectPrefix + " " + DateTime.Now.ToString("T");
+                    message.Subject = $"{subjectPrefix} {DateTime.Now:T}";
                     if (flagTRT)
                     {
                         message.Subject += " *** Incident ***";
@@ -107,13 +130,12 @@ namespace ApiPMU.Services
                 catch (Exception ex) when (retry < 3)
                 {
                     // En cas d'échec, consigner l'erreur dans le log et retenter après une minute
-                    Console.WriteLine("Courriel - Echec de l'envoi " + retry);
-                    // Vous pouvez également ajouter à une variable de log, par exemple :
+                    _logger.LogError("Courriel - Echec de l'envoi {Retry}. Erreur: {Error}", retry, ex.Message);
                     log += $"<br> - Courriel - Echec de l'envoi {retry} : {ex.Message}.";
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("Courriel - L'envoi a échoué " + serveur + ".genturf@free.fr");
+                    _logger.LogError("Courriel - L'envoi a échoué pour {Adresse}. Erreur: {Error}", serveur + ".genturf@free.fr", ex.Message);
                     log += $"<br> - Courriel - L'envoi a échoué {serveur}.genturf@free.fr : {ex.Message}";
                     break;
                 }

@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using ApiPMU.Models;
 using System.Diagnostics.Eventing.Reader;
 using System.Collections.Generic;
+using Microsoft.Extensions.Logging;
 
 namespace ApiPMU.Parsers
 {
@@ -13,6 +14,18 @@ namespace ApiPMU.Parsers
     /// </summary>
     public class PerformancesParser
     {
+        private readonly ILogger<PerformancesParser> _logger;
+        private readonly string _connectionString;
+        private string numGeny = string.Empty;
+        public PerformancesParser(ILogger<PerformancesParser> logger, string connectionString)
+        {
+            _logger = logger;
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
+
+            _connectionString = connectionString;
+        }
+
         // Dictionnaire pour ajuster manuellement certaines correspondances entre hippodromes.
         private static readonly Dictionary<string, string> Correspondances = new Dictionary<string, string>
         {
@@ -29,19 +42,6 @@ namespace ApiPMU.Parsers
             { "MAUQUENCHY", "ROUEN MAUQUENCHY" },
             { "VIRE NORMANDIE", "VIRE" }
         };
-        private readonly string _connectionString;
-
-        /// <summary>
-        /// Constructeur nécessitant la chaîne de connexion (pour la vérification en BDD).
-        /// </summary>
-        /// <param name="connectionString">Chaîne de connexion SQL.</param>
-        public PerformancesParser(string connectionString)
-        {
-            if (string.IsNullOrWhiteSpace(connectionString))
-                throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
-
-            _connectionString = connectionString;
-        }
 
         /// <summary>
         /// Parse l'intégralité du JSON et retourne une liste de 5 Performances pour chaque cheval.
@@ -58,7 +58,7 @@ namespace ApiPMU.Parsers
             JToken? perfs = data["participants"];
             if (perfs == null)
             {
-                Console.WriteLine("La clé 'reunions' est absente du JSON.");
+                _logger.LogError("La clé 'reunions' est absente du JSON.");
                 return performancesResult;
             }
 
@@ -86,7 +86,7 @@ namespace ApiPMU.Parsers
                 }
             }catch
             {
-                Console.WriteLine("La clé 'coursesCourues' est absente du JSON.");
+                _logger.LogError("La clé 'coursesCourues' est absente du JSON.");
             }
             return performancesResult;
         }

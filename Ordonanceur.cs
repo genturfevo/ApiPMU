@@ -107,9 +107,10 @@ namespace ApiPMU
             string dateStr = targetDate.ToString("ddMMyyyy");
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
-            // *********************************************** //
-            // Api PMU : Chargement du programme de la journée //
-            // *********************************************** //
+            // ************************************************************************** //
+            // Api PMU : Chargement du programme de la journée                            //
+            // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA //
+            // ************************************************************************** //
             //
             var programmeData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(dateStr);
 
@@ -134,9 +135,10 @@ namespace ApiPMU
             _logger.LogInformation("Programme parsé avec {CountReunions} réunions et {CountCourses} courses.",
                                    programmeParsed.Reunions.Count, programmeParsed.Courses.Count);
 
-            // **************************************************** //
-            // BDD : Enregistrement des données réunions et courses //
-            // **************************************************** //
+            // ******************************** //
+            // BDD : Enregistrement des données //
+            // Tables : Reunions et Courses     //
+            // ******************************** //
             //
             using (var scope = _serviceProvider.CreateScope())
             {
@@ -157,9 +159,10 @@ namespace ApiPMU
                 _logger.LogInformation("Les données Réunions et Courses ont été enregistrées dans la base de données via DbService.");
             }
 
-            // ********************************************************************* //
-            // BDD : Lecture des réunions et courses enregistrées pour cette journée //
-            // ********************************************************************* //
+            // *************************************** //
+            // BDD : Lecture de la journée enregistrée //
+            // Boucle sur les réunions et courses      //
+            // *************************************** //
             //
             var dbService = _serviceProvider.GetService<IDbService>();
             if (dbService == null)
@@ -174,9 +177,9 @@ namespace ApiPMU
                 _logger.LogInformation($"Aucune réunion trouvée pour la date {dateStr}");
                 return;
             }
-            // ************************** //
-            // Itération sur les réunions // 
-            // ************************** //
+            // *********************** //
+            // Boucle sur les réunions // 
+            // *********************** //
             //
             foreach (var reunion in reunions)
             {
@@ -190,9 +193,9 @@ namespace ApiPMU
                     _logger.LogInformation($"Aucune course trouvée pour la réunion n° {numReunion}");
                     continue;
                 }
-                // ************************* //
-                // Itération sur les courses // 
-                // ************************* //
+                // ************************************ //
+                // Boucle sur les courses de la réunion // 
+                // ************************************ //
                 //
                 foreach (var course in courses)
                 {
@@ -200,9 +203,10 @@ namespace ApiPMU
                     string disc = course.Discipline;
                     _logger.LogInformation($"Chargement du détail pour la course n° {numCourse} de la réunion n° {numReunion}");
 
-                    // ************************************************** //
-                    // Api PMU : Chargement des participants d'une course //
-                    // ************************************************** //
+                    // ********************************************************************************************* //
+                    // Api PMU : Chargement des participants d'une course                                            //
+                    // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA/Rx/Cx/participants //
+                    // ********************************************************************************************* //
                     //
                     var courseData = await _apiPmuService.ChargerCourseAsync<dynamic>(dateStr, numReunion, numCourse, "participants");
 
@@ -226,23 +230,26 @@ namespace ApiPMU
                     }
                     _logger.LogInformation("Course parsé avec {CountChevaux}.", participantsParsed.Chevaux.Count);
 
-                    // **************************************************************** //
-                    // BDD : Enregistrement des données participants courses et chevaux //
-                    // **************************************************************** //
+                    // ******************************** //
+                    // BDD : Enregistrement des données //
+                    // Table : Chevaux                  //
+                    // ******************************** //
                     //
                     await dbService.SaveOrUpdateChevauxAsync(participantsParsed.Chevaux, updateColumns: true);
                     _logger.LogInformation($"Détail de course enregistré pour la course n° {numCourse} de la réunion n° {numReunion}");
 
-                    // ********************************************************** //
-                    // Mise à jour de l'âge moyen des participants dans la course //
-                    // ********************************************************** //
+                    // ******************************** //
+                    // BDD : Enregistrement des données //
+                    // Table : Courses - MAJ age moyen  //
+                    // ******************************** //
                     //
                     await dbService.UpdateCourseAgeMoyenAsync(numGeny, numCourse);
                     _logger.LogInformation($"Age moyen mis à jour pour la course Numero : {numCourse} de la réunion NumGeny : {numGeny}");
 
-                    // ****************************************************************** //
-                    // Api PMU : Chargement de l'historique des participants d'une course //
-                    // ****************************************************************** //
+                    // *************************************************************************************************************** //
+                    // Api PMU : Chargement de l'historique des participants d'une course                                              //
+                    // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA/Rx/Cx/performances-detaillees/pretty //
+                    // *************************************************************************************************************** //
                     //
                     var performancesData = await _apiPmuService.ChargerPerformancesAsync<dynamic>(dateStr, numReunion, numCourse, "performances-detaillees/pretty");
 
@@ -266,9 +273,9 @@ namespace ApiPMU
                     }
                     _logger.LogInformation("Performances parsées avec {CountPerformances} entrées.", performancesParsed.Performances.Count);
 
-                    // ************************************************************************** //
-                    // Compléter les performances à partir du programme des dates de performances //
-                    // ************************************************************************** //
+                    // ***************************************************** //
+                    // Complément des performances : Accès Api PMU programme //
+                    // ***************************************************** //
                     //
                     short perfR;
                     short perfC;
@@ -285,9 +292,10 @@ namespace ApiPMU
                         perfR = 0;
                         perfC = 0;
 
-                        // ************************************************************************ //
-                        // Api PMU : Charger le programme correspondant à la date de la performance //
-                        // ************************************************************************ //
+                        // ***************************************************************************************** //
+                        // Api PMU : (Performances) Charger le programme correspondant à la date de la performance   //
+                        // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA                //
+                        // ***************************************************************************************** //
                         //
                         var programmeJsonForPerfData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(perfDateStr);
 
@@ -303,9 +311,13 @@ namespace ApiPMU
                         //
                         JObject rdata = JObject.Parse(programmeJsonForPerfJson);
                         JToken? Jsonprog = rdata["programme"];
-                        if (Jsonprog == null) { Console.WriteLine("La clé 'programme' est absente du programmeJsonForPerfJson."); }
+                        if (Jsonprog == null) { 
+                            _logger.LogError("La clé 'programme' est absente du programmeJsonForPerfJson.");
+                        }
                         JToken? Jsonreun = Jsonprog["reunions"];
-                        if (Jsonreun == null) { Console.WriteLine("La clé 'reunions' est absente du programmeJsonForPerfJson."); }
+                        if (Jsonreun == null) { 
+                            _logger.LogError("La clé 'reunions' est absente du programmeJsonForPerfJson.");
+                        }
                         int allocation = 0;
                         string cordage = string.Empty;
                         string conditions = string.Empty;
@@ -325,7 +337,9 @@ namespace ApiPMU
                                         string? libC = courseToken["libelle"]?.ToString();
                                         string? libL = courseToken["libelleCourt"]?.ToString();
                                         //
-                                        // Minimum de 60% de correspondance entre le nom du prix de l'historique et le libelle de la course
+                                        // Minimum de 60% de correspondance entre :
+                                        // - le nom du prix de l'historique
+                                        // - le libelle de la course
                                         //
                                         if ((libC != null && ContainsApproximately(libC, nomPrixTemp, 0.6)) ||
                                             (libL != null && ContainsApproximately(libL, nomPrixTemp, 0.6)))
@@ -353,9 +367,10 @@ namespace ApiPMU
                         }
                         if (found && perfR != 0 && perfC != 0)
                         {
-                            // ************************************************** //
-                            // Api PMU : Chargement des participants d'une course //
-                            // ************************************************** //
+                            // ********************************************************************************************* //
+                            // Api PMU : (Performances) Charger les participants d'une course                                //
+                            // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA/Rx/Cx/participants //
+                            // ********************************************************************************************* //
                             //
                             var courseJsonForPerfData = await _apiPmuService.ChargerCourseAsync<dynamic>(perfDateStr, perfR, perfC, "participants");
 
@@ -442,7 +457,7 @@ namespace ApiPMU
                                 perf.Cote = 0;
                                 perf.Deferre = string.Empty;
                                 perf.Avis = string.Empty;
-                                Console.WriteLine("La clé 'participants' est absente du courseJsonForPerfJson.");
+                                _logger.LogError("La clé 'participants' est absente du courseJsonForPerfJson.");
                             }
                         }
                         else
@@ -454,13 +469,14 @@ namespace ApiPMU
                             perf.Partants = 0;
                             perf.Deferre = string.Empty;
                             perf.Avis = string.Empty;
-                            Console.WriteLine($"La réunion/course est absente {!found} && numReunion {perfR} && numCourse {perfC}.");
+                            _logger.LogError($"La réunion/course est absente {!found} && numReunion {perfR} && numCourse {perfC}.");
                         }
                     }
 
-                    // ************************************************* //
-                    // BDD : Enregistrement des performances des chevaux //
-                    // ************************************************* //
+                    // ******************************** //
+                    // BDD : Enregistrement des données //
+                    // Table : Performances             //
+                    // ******************************** //
                     //
                     await dbService.SaveOrUpdatePerformanceAsync(performancesParsed.Performances, updateColumns: true, deleteAndRecreate: true);
                     _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
@@ -485,7 +501,8 @@ namespace ApiPMU
                     string subjectPrefix = "ApiPMU Fin de traitement";
                     string log = "Traitement terminé avec succès."; // Vous pouvez construire ce log en fonction des traitements effectués
                     string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "preslesmu";
-                    await EmailService.SendCompletionEmailAsync(targetDate, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
+                    var courrielService = new CourrielService(_logger, connectionString);
+                    await courrielService.SendCompletionEmailAsync(targetDate, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
                 }
             }
             catch (Exception ex)
@@ -496,7 +513,6 @@ namespace ApiPMU
 
         /// <summary>
         /// Méthode de calcul de similarité entre 2 chaînes de caractères 
-        /// À la fin du traitement, un courriel récapitulatif est envoyé.
         /// </summary>
         /// <param name="chaine">Chaine où s'effectue la recherche.</param>
         /// <param name="recherche">Chaine recherchée.</param>

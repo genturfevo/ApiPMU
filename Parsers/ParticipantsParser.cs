@@ -4,6 +4,8 @@ using Microsoft.Data.SqlClient; // Veillez à installer le package NuGet Microso
 using Newtonsoft.Json.Linq;
 using ApiPMU.Models;
 using System.Diagnostics.Eventing.Reader;
+using ApiPMU.Services;
+using Microsoft.Extensions.Logging;
 
 namespace ApiPMU.Parsers
 {
@@ -12,15 +14,12 @@ namespace ApiPMU.Parsers
     /// </summary>
     public class ParticipantsParser
     {
+        private readonly ILogger<ParticipantsParser> _logger;
         private readonly string _connectionString;
-        private string numGeny= string.Empty;
-
-        /// <summary>
-        /// Constructeur nécessitant la chaîne de connexion (pour la vérification en BDD).
-        /// </summary>
-        /// <param name="connectionString">Chaîne de connexion SQL.</param>
-        public ParticipantsParser(string connectionString)
+        private string numGeny = string.Empty;
+        public ParticipantsParser(ILogger<ParticipantsParser> logger, string connectionString)
         {
+            _logger = logger;
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentException("La chaîne de connexion ne peut être nulle ou vide.", nameof(connectionString));
 
@@ -43,7 +42,7 @@ namespace ApiPMU.Parsers
             JToken? participants = data["participants"];
             if (participants == null)
             {
-                Console.WriteLine("La clé 'reunions' est absente du JSON.");
+                _logger.LogError("La clé 'reunions' est absente du JSON.");
                 return participantsResult;
             }
 
