@@ -7,9 +7,9 @@ using Microsoft.Extensions.Hosting;
 using ApiPMU.Parsers;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
-using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
-using System.Diagnostics.Eventing.Reader;
+using HtmlAgilityPack;
+using System.Text.Json;
 
 namespace ApiPMU
 {
@@ -110,6 +110,7 @@ namespace ApiPMU
         private async Task ExecuteExtractionForDate(DateTime targetDate, CancellationToken token)
         {
             string dateStr = targetDate.ToString("ddMMyyyy");
+            string discipline = string.Empty;
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
             // ************************************************************************** //
@@ -166,6 +167,50 @@ namespace ApiPMU
                 _logger.LogInformation("Les données Réunions et Courses ont été enregistrées dans la base de données via DbService.");
             }
 
+            // ******************************************* //
+            // FRANCE-GALOP : Paramètre annuel (year=AAAA) //
+            // ******************************************* //
+            //
+            string annee = targetDate.ToString("yyyy");
+
+            // **************************************************************************************************************** //
+            // FRANCE-GALOP : Chargement des entraineurs - typeIndividu=Entraineur                                              //
+            // Url : https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu=Entraineur&year=2025 //
+            //       &specialty=0&racetrack=null&category=6&nbResult=1000                                                       //
+            // **************************************************************************************************************** //
+            //
+            var entGalop = new ListeParticipants();
+            entGalop.EntraineurJokeys = await ExtractEntraineurJockeyGalopRankingAsync("Entraineur", annee);
+            _logger.LogInformation("Extraction du classement des entraineurs galop terminée.");
+
+            // ************************************************************************************************************ //
+            // FRANCE-GALOP : Chargement des jockeys - typeIndividu=Entraineur                                              //
+            // Url : https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu=Jockey&year=2025 //
+            //       &specialty=0&racetrack=null&category=6&nbResult=1000                                                   //
+            // ************************************************************************************************************ //
+            //
+            var jokGalop = new ListeParticipants();
+            jokGalop.EntraineurJokeys = await ExtractEntraineurJockeyGalopRankingAsync("Jockey", annee);
+            _logger.LogInformation("Extraction du classement des jockeys galop terminée.");
+
+            // ********************************************************************************************************************* //
+            // LE TROT : Chargement des entraineurs                                                                                  //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=1000&ranking_type=ENTR-NEW&sort_by=rank&order_by=asc //
+            // ********************************************************************************************************************* //
+            //
+            var entTrot = new ListeParticipants();
+            entTrot.EntraineurJokeys = await ExtractEntraineurJockeyTrotRankingAsync("ENTR");
+            _logger.LogInformation("Extraction du classement des entraineurs trot terminée.");
+
+            // ********************************************************************************************************************* //
+            // LE TROT : Chargement des jockeys - typeIndividu=Entraineur                                                            //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=1000&ranking_type=COOR-NEW&sort_by=rank&order_by=asc //
+            // ********************************************************************************************************************* //
+            //
+            var jokTrot = new ListeParticipants();
+            jokTrot.EntraineurJokeys = await ExtractEntraineurJockeyTrotRankingAsync("COOR");
+            _logger.LogInformation("Extraction du classement des jockeys trot terminée.");
+
             // *************************************** //
             // BDD : Lecture de la journée enregistrée //
             // Boucle sur les réunions et courses      //
@@ -206,6 +251,8 @@ namespace ApiPMU
                 //
                 foreach (var course in courses)
                 {
+                    // Recherche de la discipline pour ciblage des entraineurs et drivers en fin de traitement
+                    if (course.NumCourse == 1) { discipline = course.Discipline; }
                     short numCourse = course.NumCourse;
                     string disc = course.Discipline;
                     _logger.LogInformation($"Chargement du détail pour la course n° {numCourse} de la réunion n° {numReunion}");
@@ -492,6 +539,14 @@ namespace ApiPMU
                     await dbService.SaveOrUpdatePerformanceAsync(performancesParsed.Performances, updateColumns: true, deleteAndRecreate: true);
                     _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
                 }
+
+                // ***************************************************************************** //
+                // Récupération des entraîneurs et jockeys d'une réunion dans la base de données //
+                // ***************************************************************************** //
+                //
+                List<string> listeEntraineurs = await GetEntraineursOrJockeysAsync(numGeny, "Entraineur");
+                List<string> listeJockeys = await GetEntraineursOrJockeysAsync(numGeny, "Jokey");
+
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
@@ -511,7 +566,7 @@ namespace ApiPMU
                     bool flagTRT = false; // Ajustez selon votre logique (exemple : définir à true en cas d'incident)
                     string subjectPrefix = "ApiPMU Fin de traitement";
                     string log = "Traitement terminé avec succès."; // Vous pouvez construire ce log en fonction des traitements effectués
-                    string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "preslesmu";
+                    string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "PRESLESMU";
                     var courrielService = new CourrielService(
                          _serviceProvider.GetRequiredService<ILogger<CourrielService>>(),
                          _connectionString);
@@ -522,6 +577,191 @@ namespace ApiPMU
             {
                 _logger.LogError(ex, "Erreur lors de l'envoi du courriel récapitulatif.");
             }
+        }
+
+        /// <summary>
+        /// Méthode d'extraction des entraineurs et jockeys sur le site france-galop.
+        /// si pas de données, on essaie l'annee precedente.
+        /// </summary>
+        /// <param name="typeIndividu">Extraction pour les jockeys ou les entraineurs.</param>
+        /// <param name="annee">Année des statistiques.</param>
+        private async Task<ICollection<EntraineurJokey>> ExtractEntraineurJockeyGalopRankingAsync(string typeIndividu, string annee)
+        {
+            using HttpClient client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3");
+            client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+            client.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
+
+            int retryCount = 2;  // Nombre de tentatives (année actuelle et année précédente)
+            int attempt = 0;
+            bool dataFound = false;
+
+            while (attempt < retryCount && !dataFound)
+            {
+                string currentYear = (int.Parse(annee) - attempt).ToString(); // Essai avec l'année, puis année-1
+                string url = $"https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu={typeIndividu}&year={currentYear}&specialty=0&racetrack=null&category=6&nbResult=1000";
+
+                try
+                {
+                    string response = await client.GetStringAsync(url);
+                    HtmlDocument doc = new HtmlDocument();
+                    doc.LoadHtml(response);
+
+                    var rows = doc.DocumentNode.SelectNodes("//tr");
+
+                    if (rows == null)
+                    {
+                        _logger.LogWarning($"Aucun classement de {typeIndividu} trouvé pour l'année {currentYear}. Réessai avec {int.Parse(annee) - 1}...");
+                        attempt++;
+                        continue; // Passe à l'année précédente
+                    }
+
+                    ListeParticipants participants = new ListeParticipants();
+
+                    foreach (var row in rows)
+                    {
+                        var cols = row.SelectNodes("td");
+
+                        if (cols != null && cols.Count > 10)
+                        {
+                            string nomIndividu = cols[1].InnerText.Trim().ToUpper();
+
+                            EntraineurJokey entJok = new EntraineurJokey
+                            {
+                                NumGeny = string.Empty,
+                                Entjok = char.ToUpper(typeIndividu[0]).ToString(),
+                                Nom = nomIndividu,
+                                NbCourses = int.Parse(cols[3].InnerText.Trim()),
+                                NbVictoires = int.Parse(cols[4].InnerText.Trim()),
+                                NbCR = short.Parse(cols[5].InnerText.Trim()),
+                                Ecart = 0
+                            };
+
+                            participants.EntraineurJokeys.Add(entJok);
+                            dataFound = true;
+                        }
+                    }
+
+                    _logger.LogInformation($"Extraction terminée pour {typeIndividu} en {currentYear} avec {participants.EntraineurJokeys.Count} entrées.");
+                    return participants.EntraineurJokeys;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Erreur lors de l'extraction du classement des {typeIndividu}s ({currentYear}) : {ex.Message}");
+                    break; // Stoppe la boucle en cas d'erreur réseau ou serveur
+                }
+            }
+
+            if (!dataFound)
+            {
+                _logger.LogError($"Aucune donnée trouvée pour {typeIndividu} en {annee} et {int.Parse(annee) - 1}. Annulation de l'extraction.");
+            }
+
+            // Retourne une collection vide si aucune donnée n'a été trouvée ou en cas d'erreur.
+            return new List<EntraineurJokey>();
+        }
+
+        /// <summary>
+        /// Méthode d'extraction des entraineurs et jockeys sur le site Le Trot.
+        /// </summary>
+        /// <param name="typeIndividu">Extraction pour les jockeys ou les entraineurs.</param>
+        private async Task<ICollection<EntraineurJokey>> ExtractEntraineurJockeyTrotRankingAsync(string typeIndividu)
+        {
+            using HttpClient client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3");
+            client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+            client.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
+
+            string url = $"https://www.letrot.com/v1/api/rankings/person?page=1&limit=1000&ranking_type={typeIndividu}-NEW&sort_by=rank&order_by=asc";
+
+            try
+            {
+                string response = await client.GetStringAsync(url);
+
+                // Désérialisation du JSON
+                var rankings = Newtonsoft.Json.JsonConvert.DeserializeObject<List<TrotRanking>>(response);
+
+                if (rankings == null || rankings.Count == 0)
+                {
+                    _logger.LogError($"Aucun classement de {typeIndividu} trouvé !");
+                    return new List<EntraineurJokey>();
+                }
+
+                ListeParticipants participants = new ListeParticipants();
+
+                foreach (var ranking in rankings)
+                {
+                    EntraineurJokey entJok = new EntraineurJokey
+                    {
+                        NumGeny = string.Empty,
+                        Entjok = char.ToUpper(typeIndividu[0]).ToString(),
+                        Nom = ranking.PersonLabel.ToUpper(),
+                        NbCourses = ranking.NbRaces,
+                        NbVictoires = ranking.NbVictories,
+                        NbCR = 0, // Valeur par défaut (pas disponible dans le JSON)
+                        Ecart = 0
+                    };
+
+                    participants.EntraineurJokeys.Add(entJok);
+                }
+
+                _logger.LogInformation($"Extraction terminée pour {typeIndividu} avec {participants.EntraineurJokeys.Count} entrées.");
+                return participants.EntraineurJokeys;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Erreur lors de l'extraction du classement des {typeIndividu}s : {ex.Message}");
+                return new List<EntraineurJokey>();
+            }
+        }
+        private class TrotRanking
+        {
+            public string? Rank { get; set; }
+            public string? PersonId { get; set; }
+            public string? PersonLastname { get; set; }
+            public string? PersonFirstname { get; set; }
+            public string? PersonLabel { get; set; }
+            public int? NbVictories { get; set; }
+            public int? NbRaces { get; set; }
+            public int? TotalGain { get; set; }
+        }
+
+        /// <summary>
+        /// Méthode d'extraction des entraineurs ou jockeys sur une réunion dans la base de données.
+        /// </summary>
+        /// <param name="numGeny">Clef d'accès pour les réunions.</param>
+        /// <param name="type">entraineur ou jokey.</param>
+        private async Task<List<string>> GetEntraineursOrJockeysAsync(string numGeny, string type)
+        {
+            List<string> noms = new List<string>();
+
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+
+                string query = type == "Entraineur"
+                    ? "SELECT DISTINCT(entraineur) FROM chevaux WHERE NumGeny = @numGeny"
+                    : "SELECT DISTINCT(jokey) FROM chevaux WHERE NumGeny = @numGeny";
+
+                using var command = dbContext.Database.GetDbConnection().CreateCommand();
+                command.CommandText = query;
+                command.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@numGeny", numGeny));
+
+                dbContext.Database.OpenConnection();
+                using var reader = await command.ExecuteReaderAsync();
+
+                while (reader.Read())
+                {
+                    noms.Add(reader.GetString(0).ToUpper().Trim());
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Erreur lors de la récupération des {type}s : {ex.Message}");
+            }
+
+            return noms;
         }
 
         /// <summary>
