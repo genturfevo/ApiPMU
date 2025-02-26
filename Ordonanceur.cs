@@ -9,7 +9,11 @@ using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using HtmlAgilityPack;
-using System.Text.Json;
+using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium;
+using WebDriverManager;
+using WebDriverManager.DriverConfigs.Impl;
+using OpenQA.Selenium.DevTools.V131.CSS;
 
 namespace ApiPMU
 {
@@ -32,12 +36,16 @@ namespace ApiPMU
                            IServiceProvider serviceProvider,
                            string connectionString)
         {
-            _apiPmuService = apiPmuService;
-            _logger = logger;
-            _serviceProvider = serviceProvider;
-            _connectionString = !string.IsNullOrWhiteSpace(connectionString)
-                ? connectionString
-                : throw new ArgumentException("La chaîne de connexion est obligatoire.", nameof(connectionString));
+            _apiPmuService = apiPmuService ?? throw new ArgumentNullException(nameof(apiPmuService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+
+            // Vérification de la chaîne de connexion
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                throw new ArgumentException("La chaîne de connexion ne peut pas être vide.", nameof(connectionString));
+            }
+            _connectionString = connectionString;
 
             // ************************************************* //
             //      (utilisable uniquement en mode débogage)     //
@@ -45,7 +53,7 @@ namespace ApiPMU
             // ************************************************* //
 
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("24022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            _forcedDate = DateTime.ParseExact("27022025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
             _forcedDate = null;
 #endif
@@ -110,7 +118,6 @@ namespace ApiPMU
         private async Task ExecuteExtractionForDate(DateTime targetDate, CancellationToken token)
         {
             string dateStr = targetDate.ToString("ddMMyyyy");
-            string discipline = string.Empty;
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
             // ************************************************************************** //
@@ -252,7 +259,6 @@ namespace ApiPMU
                 foreach (var course in courses)
                 {
                     // Recherche de la discipline pour ciblage des entraineurs et drivers en fin de traitement
-                    if (course.NumCourse == 1) { discipline = course.Discipline; }
                     short numCourse = course.NumCourse;
                     string disc = course.Discipline;
                     _logger.LogInformation($"Chargement du détail pour la course n° {numCourse} de la réunion n° {numReunion}");
@@ -538,15 +544,226 @@ namespace ApiPMU
                     //
                     await dbService.SaveOrUpdatePerformanceAsync(performancesParsed.Performances, updateColumns: true, deleteAndRecreate: true);
                     _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
+
+                    // ************************************************************************************* //
+                    // Récupération des entraîneurs et jockeys de la course en cours dans la base de données //
+                    // ************************************************************************************* //
+                    List<string> listeEntraineurs = await GetEntraineursOrJockeysAsync(numGeny, numCourse, "Entraineur");
+                    List<string> listeJockeys = await GetEntraineursOrJockeysAsync(numGeny, numCourse, "Jokey");
+
+                    // ******************************************************************************** //
+                    // Chargement du DataSet EntraineurJokey à partir des tables FranceGalop ou Le Trot //
+                    // ******************************************************************************** //
+                    ListeParticipants participants = new ListeParticipants();
+                    List<string> entraineursNonTrouves = new List<string>();
+                    List<string> jockeysNonTrouves = new List<string>();
+
+                    if (disc == "ATTELE" || disc == "MONTE")
+                    {
+                        // 🔹 Comparer listeEntraineurs avec entTrot.EntraineurJokeys
+                        foreach (string entraineur in listeEntraineurs)
+                        {
+                            // Nettoyer le nom de l'entraîneur recherché
+                            string entraineurNettoye = NettoyerNom(entraineur);
+
+                            // Chercher le meilleur match parmi les entraîneurs
+                            var match = TrouverMeilleurMatch(entraineurNettoye, entTrot.EntraineurJokeys.Select(e => NettoyerNom(e.Nom)).ToList());
+
+                            if (match != null)
+                            {
+                                // Trouver l'entraîneur correspondant dans la liste
+                                var entraineurMatch = entTrot.EntraineurJokeys.FirstOrDefault(e => NettoyerNom(e.Nom) == match);
+
+                                if (entraineurMatch != null)
+                                {
+                                    participants.EntraineurJokeys.Add(new EntraineurJokey
+                                    {
+                                        NumGeny = numGeny,
+                                        Entjok = "E", // "E" pour Entraîneur
+                                        Nom = entraineurMatch.Nom,
+                                        NbCourses = entraineurMatch.NbCourses,
+                                        NbVictoires = entraineurMatch.NbVictoires,
+                                        NbCR = entraineurMatch.NbCR,
+                                        Ecart = entraineurMatch.Ecart
+                                    });
+                                }
+                            }
+                            else
+                            {
+                                // Ajouter un enregistrement avec des valeurs par défaut si aucune correspondance n'est trouvée
+                                participants.EntraineurJokeys.Add(new EntraineurJokey
+                                {
+                                    NumGeny = numGeny,
+                                    Entjok = "E", // "E" pour Entraîneur
+                                    Nom = entraineur, // Nom recherché
+                                    NbCourses = 0,
+                                    NbVictoires = 0,
+                                    NbCR = 0,
+                                    Ecart = 0
+                                });
+                                entraineursNonTrouves.Add(entraineur);
+                            }
+                        }
+
+                        // 🔹 Comparer listeJockeys avec jokTrot.EntraineurJokeys
+                        foreach (string jockey in listeJockeys)
+                        {
+                            // Nettoyer le nom de l'entraîneur recherché
+                            string jockeyNettoye = NettoyerNom(jockey);
+
+                            // Chercher le meilleur match parmi les entraîneurs
+                            var match = TrouverMeilleurMatch(jockeyNettoye, jokTrot.EntraineurJokeys.Select(e => NettoyerNom(e.Nom)).ToList());
+
+                            if (match != null)
+                            {
+                                // Trouver l'entraîneur correspondant dans la liste
+                                var jockeyMatch = jokTrot.EntraineurJokeys.FirstOrDefault(e => NettoyerNom(e.Nom) == match);
+
+                                if (jockeyMatch != null)
+                                {
+                                    participants.EntraineurJokeys.Add(new EntraineurJokey
+                                    {
+                                        NumGeny = numGeny,
+                                        Entjok = "J", // "J" pour Driver/Jockey
+                                        Nom = jockeyMatch.Nom,
+                                        NbCourses = jockeyMatch.NbCourses,
+                                        NbVictoires = jockeyMatch.NbVictoires,
+                                        NbCR = jockeyMatch.NbCR,
+                                        Ecart = jockeyMatch.Ecart
+                                    });
+                                }
+                            }
+                            else
+                            {
+                                // Ajouter un enregistrement avec des valeurs par défaut si aucune correspondance n'est trouvée
+                                participants.EntraineurJokeys.Add(new EntraineurJokey
+                                {
+                                    NumGeny = numGeny,
+                                    Entjok = "J", // "J" pour Driver/Jockey
+                                    Nom = jockey, // Nom recherché
+                                    NbCourses = 0,
+                                    NbVictoires = 0,
+                                    NbCR = 0,
+                                    Ecart = 0
+                                });
+                                jockeysNonTrouves.Add(jockey);
+                            }
+                        }
+
+                    }
+                    else // 🔹 Pour les autres disciplines (Galop)
+                    {
+                        // 🔹 Comparer listeEntraineurs avec entGalop.EntraineurJokeys
+                        foreach (string entraineur in listeEntraineurs)
+                        {
+                            // Nettoyer le nom de l'entraîneur recherché
+                            string entraineurNettoye = NettoyerNom(entraineur);
+
+                            // Chercher le meilleur match parmi les entraîneurs
+                            var match = TrouverMeilleurMatch(entraineurNettoye, entGalop.EntraineurJokeys.Select(e => NettoyerNom(e.Nom)).ToList());
+
+                            if (match != null)
+                            {
+                                // Trouver l'entraîneur correspondant dans la liste
+                                var entraineurMatch = entGalop.EntraineurJokeys.FirstOrDefault(e => NettoyerNom(e.Nom) == match);
+
+                                if (entraineurMatch != null)
+                                {
+                                    participants.EntraineurJokeys.Add(new EntraineurJokey
+                                    {
+                                        NumGeny = numGeny,
+                                        Entjok = "E", // "E" pour Entraîneur
+                                        Nom = entraineurMatch.Nom,
+                                        NbCourses = entraineurMatch.NbCourses,
+                                        NbVictoires = entraineurMatch.NbVictoires,
+                                        NbCR = entraineurMatch.NbCR,
+                                        Ecart = entraineurMatch.Ecart
+                                    });
+                                }
+                            }
+                            else
+                            {
+                                // Ajouter un enregistrement avec des valeurs par défaut si aucune correspondance n'est trouvée
+                                participants.EntraineurJokeys.Add(new EntraineurJokey
+                                {
+                                    NumGeny = numGeny,
+                                    Entjok = "E", // "E" pour Entraîneur
+                                    Nom = entraineur, // Nom recherché
+                                    NbCourses = 0,
+                                    NbVictoires = 0,
+                                    NbCR = 0,
+                                    Ecart = 0
+                                });
+                                entraineursNonTrouves.Add(entraineur);
+                            }
+                        }
+
+                        // 🔹 Comparer listeJockeys avec jokGalop.EntraineurJokeys
+                        foreach (string jockey in listeJockeys)
+                        {
+                            // Nettoyer le nom de l'entraîneur recherché
+                            string jockeyNettoye = NettoyerNom(jockey);
+
+                            // Chercher le meilleur match parmi les entraîneurs
+                            var match = TrouverMeilleurMatch(jockeyNettoye, jokGalop.EntraineurJokeys.Select(e => NettoyerNom(e.Nom)).ToList());
+
+                            if (match != null)
+                            {
+                                // Trouver l'entraîneur correspondant dans la liste
+                                var jockeyMatch = jokGalop.EntraineurJokeys.FirstOrDefault(e => NettoyerNom(e.Nom) == match);
+
+                                if (jockeyMatch != null)
+                                {
+                                    participants.EntraineurJokeys.Add(new EntraineurJokey
+                                    {
+                                        NumGeny = numGeny,
+                                        Entjok = "J", // "J" pour Driver/Jockey
+                                        Nom = jockeyMatch.Nom,
+                                        NbCourses = jockeyMatch.NbCourses,
+                                        NbVictoires = jockeyMatch.NbVictoires,
+                                        NbCR = jockeyMatch.NbCR,
+                                        Ecart = jockeyMatch.Ecart
+                                    });
+                                }
+                            }
+                            else
+                            {
+                                // Ajouter un enregistrement avec des valeurs par défaut si aucune correspondance n'est trouvée
+                                participants.EntraineurJokeys.Add(new EntraineurJokey
+                                {
+                                    NumGeny = numGeny,
+                                    Entjok = "J", // "J" pour Driver/Jockey
+                                    Nom = jockey, // Nom recherché
+                                    NbCourses = 0,
+                                    NbVictoires = 0,
+                                    NbCR = 0,
+                                    Ecart = 0
+                                });
+                                jockeysNonTrouves.Add(jockey);
+                            }
+                        }
+
+                    }
+
+                    // 🔹 Logger les entraîneurs et jockeys non trouvés
+                    if (entraineursNonTrouves.Count > 0)
+                    {
+                        _logger.LogWarning($"Entraîneurs non trouvés dans {disc}: {string.Join(", ", entraineursNonTrouves)}");
+                    }
+
+                    if (jockeysNonTrouves.Count > 0)
+                    {
+                        _logger.LogWarning($"Jockeys non trouvés dans {disc}: {string.Join(", ", jockeysNonTrouves)}");
+                    }
+                    // ******************************** //
+                    // BDD : Enregistrement des données //
+                    // Table : Entraineurs et Jockeys   //
+                    // ******************************** //
+                    //
+                    await dbService.SaveOrUpdateEntraineurJokeyAsync(participants.EntraineurJokeys, updateColumns: true, deleteAndRecreate: true);
+                    _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
+
                 }
-
-                // ***************************************************************************** //
-                // Récupération des entraîneurs et jockeys d'une réunion dans la base de données //
-                // ***************************************************************************** //
-                //
-                List<string> listeEntraineurs = await GetEntraineursOrJockeysAsync(numGeny, "Entraineur");
-                List<string> listeJockeys = await GetEntraineursOrJockeysAsync(numGeny, "Jokey");
-
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
@@ -581,84 +798,120 @@ namespace ApiPMU
 
         /// <summary>
         /// Méthode d'extraction des entraineurs et jockeys sur le site france-galop.
-        /// si pas de données, on essaie l'annee precedente.
         /// </summary>
         /// <param name="typeIndividu">Extraction pour les jockeys ou les entraineurs.</param>
         /// <param name="annee">Année des statistiques.</param>
         private async Task<ICollection<EntraineurJokey>> ExtractEntraineurJockeyGalopRankingAsync(string typeIndividu, string annee)
         {
-            using HttpClient client = new HttpClient();
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3");
-            client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-            client.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
+            // 📌 1️⃣ Configurer WebDriverManager pour télécharger ChromeDriver
+            new DriverManager().SetUpDriver(new ChromeConfig());
 
-            int retryCount = 2;  // Nombre de tentatives (année actuelle et année précédente)
-            int attempt = 0;
+            ChromeOptions options = new ChromeOptions();
+            options.AddArgument("--headless");  // Mode sans interface
+            options.AddArgument("--disable-gpu");
+            options.AddArgument("--no-sandbox");
+            options.AddArgument("--disable-dev-shm-usage");
+            options.AddArgument("window-size=1920x1080");
+
+            using IWebDriver driver = new ChromeDriver(options);
+
+            ListeParticipants participants = new ListeParticipants();
             bool dataFound = false;
 
-            while (attempt < retryCount && !dataFound)
+            // 📌 2️⃣ Charger les résultats pour spc = 0 et spc = 1
+            for (int spc = 0; spc <= 1; spc++)
             {
-                string currentYear = (int.Parse(annee) - attempt).ToString(); // Essai avec l'année, puis année-1
-                string url = $"https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu={typeIndividu}&year={currentYear}&specialty=0&racetrack=null&category=6&nbResult=1000";
+                string url = $"https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu={typeIndividu}&year={annee}&specialty={spc}&racetrack=null&category=6&nbResult=1000";
 
                 try
                 {
-                    string response = await client.GetStringAsync(url);
+                    // 📌 3️⃣ Charger l'URL dans Selenium WebDriver
+                    driver.Navigate().GoToUrl(url);
+
+                    // 📌 4️⃣ Attendre quelques secondes pour que le JavaScript s'exécute
+                    await Task.Delay(5000);
+
+                    // 📌 5️⃣ Récupérer le HTML après exécution JavaScript
+                    string pageSource = driver.PageSource;
+
+                    // 📌 6️⃣ Parser le HTML avec HtmlAgilityPack
                     HtmlDocument doc = new HtmlDocument();
-                    doc.LoadHtml(response);
+                    doc.LoadHtml(pageSource);
 
-                    var rows = doc.DocumentNode.SelectNodes("//tr");
-
-                    if (rows == null)
+                    // 📌 7️⃣ Extraire les liens pour récupérer les noms
+                    var nomsNodes = doc.DocumentNode.SelectNodes("//a[contains(@href, '/fr/entraineur/') or contains(@href, '/fr/jockey/')]");
+                    if (nomsNodes == null)
                     {
-                        _logger.LogWarning($"Aucun classement de {typeIndividu} trouvé pour l'année {currentYear}. Réessai avec {int.Parse(annee) - 1}...");
-                        attempt++;
-                        continue; // Passe à l'année précédente
+                        _logger.LogWarning($"Aucun classement trouvé pour {typeIndividu} en {annee} (spc={spc}).");
+                        continue; // Passe à spc = 1
                     }
 
-                    ListeParticipants participants = new ListeParticipants();
+                    var rawData = doc.DocumentNode.SelectNodes("//body")?.FirstOrDefault()?.InnerText?.Split("\n");
 
-                    foreach (var row in rows)
+                    if (rawData == null || rawData.Length < 10)
                     {
-                        var cols = row.SelectNodes("td");
+                        _logger.LogWarning($"Impossible de récupérer les données de {typeIndividu} pour l'année {annee} (spc={spc}).");
+                        continue;
+                    }
 
-                        if (cols != null && cols.Count > 10)
+                    int index = 0;
+                    foreach (var nomNode in nomsNodes)
+                    {
+                        string nomIndividu = nomNode.InnerText.Trim().ToUpper().Replace("&AMP;","&");
+
+                        if (index + 10 >= rawData.Length) break; // Vérification pour éviter les erreurs d'index
+
+                        // 📌 8️⃣ Extraire les données à partir du texte brut
+                        int.TryParse(rawData[index + 9]?.Trim(), out int nbCourses);
+                        int.TryParse(rawData[index + 10]?.Trim(), out int nbVictoires);
+                        short.TryParse(rawData[index + 11]?.Trim(), out short nbCR);
+
+                        // Vérifier si l'individu existe déjà dans la collection
+                        var existingEntr = participants.EntraineurJokeys
+                            .FirstOrDefault(e => e.Nom.Equals(nomIndividu, StringComparison.OrdinalIgnoreCase));
+
+                        if (existingEntr != null)
                         {
-                            string nomIndividu = cols[1].InnerText.Trim().ToUpper();
-
+                            // Si trouvé, cumuler les valeurs
+                            existingEntr.NbCourses += nbCourses;
+                            existingEntr.NbVictoires += nbVictoires;
+                            existingEntr.NbCR = (short?)(existingEntr.NbCR.GetValueOrDefault(0) + nbCR);
+                        }
+                        else
+                        {
+                            // Sinon, ajouter une nouvelle entrée
                             EntraineurJokey entJok = new EntraineurJokey
                             {
                                 NumGeny = string.Empty,
                                 Entjok = char.ToUpper(typeIndividu[0]).ToString(),
                                 Nom = nomIndividu,
-                                NbCourses = int.Parse(cols[3].InnerText.Trim()),
-                                NbVictoires = int.Parse(cols[4].InnerText.Trim()),
-                                NbCR = short.Parse(cols[5].InnerText.Trim()),
+                                NbCourses = nbCourses,
+                                NbVictoires = nbVictoires,
+                                NbCR = nbCR,
                                 Ecart = 0
                             };
 
                             participants.EntraineurJokeys.Add(entJok);
-                            dataFound = true;
                         }
+                        index += 21; // Déplacement vers la prochaine entrée
+                        dataFound = true;
                     }
 
-                    _logger.LogInformation($"Extraction terminée pour {typeIndividu} en {currentYear} avec {participants.EntraineurJokeys.Count} entrées.");
-                    return participants.EntraineurJokeys;
+                    _logger.LogInformation($"Extraction terminée pour {typeIndividu} en {annee} (spc={spc}) avec {participants.EntraineurJokeys.Count} entrées.");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError($"Erreur lors de l'extraction du classement des {typeIndividu}s ({currentYear}) : {ex.Message}");
-                    break; // Stoppe la boucle en cas d'erreur réseau ou serveur
+                    _logger.LogError($"Erreur lors de l'extraction du classement des {typeIndividu}s ({annee}, spc={spc}) : {ex.Message}");
                 }
             }
 
             if (!dataFound)
             {
-                _logger.LogError($"Aucune donnée trouvée pour {typeIndividu} en {annee} et {int.Parse(annee) - 1}. Annulation de l'extraction.");
+                _logger.LogError($"Aucune donnée trouvée pour {typeIndividu} en {annee}. Annulation de l'extraction.");
             }
 
-            // Retourne une collection vide si aucune donnée n'a été trouvée ou en cas d'erreur.
-            return new List<EntraineurJokey>();
+            driver.Quit(); // Ferme le navigateur
+            return participants.EntraineurJokeys;
         }
 
         /// <summary>
@@ -695,7 +948,7 @@ namespace ApiPMU
                     {
                         NumGeny = string.Empty,
                         Entjok = char.ToUpper(typeIndividu[0]).ToString(),
-                        Nom = ranking.PersonLabel.ToUpper(),
+                        Nom = ranking.PersonLabel.ToUpper().Replace("&AMP;", "&"),
                         NbCourses = ranking.NbRaces,
                         NbVictoires = ranking.NbVictories,
                         NbCR = 0, // Valeur par défaut (pas disponible dans le JSON)
@@ -731,7 +984,7 @@ namespace ApiPMU
         /// </summary>
         /// <param name="numGeny">Clef d'accès pour les réunions.</param>
         /// <param name="type">entraineur ou jokey.</param>
-        private async Task<List<string>> GetEntraineursOrJockeysAsync(string numGeny, string type)
+        private async Task<List<string>> GetEntraineursOrJockeysAsync(string numGeny, short numCourse, string type)
         {
             List<string> noms = new List<string>();
 
@@ -741,12 +994,18 @@ namespace ApiPMU
                 var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
 
                 string query = type == "Entraineur"
-                    ? "SELECT DISTINCT(entraineur) FROM chevaux WHERE NumGeny = @numGeny"
-                    : "SELECT DISTINCT(jokey) FROM chevaux WHERE NumGeny = @numGeny";
+                    ? "SELECT DISTINCT(entraineur) FROM chevaux WHERE NumGeny = @numGeny AND NumCourse = @numCourse"
+                    : "SELECT DISTINCT(jokey) FROM chevaux WHERE NumGeny = @numGeny AND NumCourse = @numCourse";
 
                 using var command = dbContext.Database.GetDbConnection().CreateCommand();
                 command.CommandText = query;
-                command.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@numGeny", numGeny));
+
+                // 📌 Ajout correct des paramètres
+                var paramNumGeny = new Microsoft.Data.SqlClient.SqlParameter("@numGeny", numGeny);
+                var paramNumCourse = new Microsoft.Data.SqlClient.SqlParameter("@numCourse", numCourse);
+
+                command.Parameters.Add(paramNumGeny);
+                command.Parameters.Add(paramNumCourse);
 
                 dbContext.Database.OpenConnection();
                 using var reader = await command.ExecuteReaderAsync();
@@ -764,6 +1023,73 @@ namespace ApiPMU
             return noms;
         }
 
+        /// <summary>
+        /// Fonction pour nettoyer les noms (retirer "MME", "MMLE", etc.).
+        /// </summary>
+        /// <param name="nom">Nom de l'entraineur ou du jokey.</param>
+        public static string NettoyerNom(string nom)
+        {
+            // Retirer les préfixes MME ou MMLE
+            nom = nom.Replace("MME ", "").Replace("MMLE ", "").Trim();
+            // Traiter les initiales et prénoms composés, enlever les espaces inutiles
+            nom = nom.Replace(". ", ".");
+            // Gérer les caractères "&" (associations)
+            nom = nom.Replace("&", "and");
+            return nom;
+        }
+        
+        /// <summary>
+        /// Calcul de la distance de Levenshtein entre deux chaînes.
+        /// </summary>
+        /// <param name="a">Nom de l'entraineur ou du jokey recherché.</param>
+        /// <param name="b">Nom de l'entraineur ou du jokey de la liste de recherche.</param>
+        public static int CalculerDistanceLevenshtein(string a, string b)
+        {
+            int n = a.Length;
+            int m = b.Length;
+            int[,] d = new int[n + 1, m + 1];
+
+            if (n == 0) return m;
+            if (m == 0) return n;
+
+            for (int i = 0; i <= n; d[i, 0] = i++) ;
+            for (int j = 0; j <= m; d[0, j] = j++) ;
+
+            for (int i = 1; i <= n; i++)
+            {
+                for (int j = 1; j <= m; j++)
+                {
+                    int substitutionCost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+                    d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + substitutionCost);
+                }
+            }
+
+            return d[n, m];
+        }
+
+        /// <summary>
+        /// Fonction pour trouver la meilleure correspondance entre deux chaînes.
+        /// </summary>
+        /// <param name="nomRecherche">Nom de l'entraineur ou du jokey recherché.</param>
+        /// <param name="listeEntraineurs">liste des noms d'entraineur ou jokey pour la recherche.</param>
+     
+        public static string TrouverMeilleurMatch(string nomRecherche, List<string> listeEntraineurs)
+        {
+            string meilleurMatch = string.Empty;
+            int scoreMax = int.MaxValue; // Plus la distance est faible, mieux c'est
+
+            foreach (var entraineur in listeEntraineurs)
+            {
+                int score = CalculerDistanceLevenshtein(nomRecherche, entraineur);
+                if (score < scoreMax)
+                {
+                    scoreMax = score;
+                    meilleurMatch = entraineur;
+                }
+            }
+
+            return meilleurMatch;
+        }        
         /// <summary>
         /// Méthode de calcul de similarité entre 2 chaînes de caractères 
         /// </summary>

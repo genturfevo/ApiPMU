@@ -130,7 +130,7 @@ namespace ApiPMU.Parsers
                 if (disc == "ATTELE" || disc == "MONTE")
                 {
                     dist = participants?["distanceParcourue"]?.Value<Single>() ?? 0;
-                    long centisecondes = participants["reductionKilometrique"]?.Value<long>() ?? 0;
+                    long centisecondes = participants?["reductionKilometrique"]?.Value<long>() ?? 0;
                     TimeSpan temps = TimeSpan.FromSeconds(centisecondes / 100.0);
                     redKDist = (temps.ToString(@"m\:ss\.f")).Replace(".", "::");
                 }

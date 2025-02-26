@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using ApiPMU.Services;
 using ApiPMU.Models;
+using Microsoft.Extensions.Logging;
 
 namespace ApiPMU
 {
@@ -25,8 +26,18 @@ namespace ApiPMU
                     services.AddHttpClient<IApiPmuService, ApiPmuService>();
                     services.AddScoped<IDbService, DbService>();
 
-                    // Enregistrement du service hébergé qui s'exécutera quotidiennement
-                    services.AddHostedService<Ordonanceur>();
+                    // 📌 4️⃣ Injection manuelle de `Ordonanceur` avec la chaîne de connexion
+                    services.AddSingleton<Ordonanceur>(sp =>
+                    {
+                        var apiPmuService = sp.GetRequiredService<IApiPmuService>();
+                        var logger = sp.GetRequiredService<ILogger<Ordonanceur>>();
+                        var serviceProvider = sp.GetRequiredService<IServiceProvider>();
+
+                        return new Ordonanceur(apiPmuService, logger, serviceProvider, connectionString);
+                    });
+
+                    // 📌 5️⃣ Ajout de `Ordonanceur` comme `HostedService`
+                    services.AddHostedService(sp => sp.GetRequiredService<Ordonanceur>());
                 })
                 .Build();
 

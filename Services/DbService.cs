@@ -67,6 +67,7 @@ namespace ApiPMU.Services
 
             await _context.SaveChangesAsync();
         }
+
         /// <summary>
         /// Crée ou met à jour une course. 
         /// La clé commune est NumGeny, NumCourse.
@@ -110,6 +111,7 @@ namespace ApiPMU.Services
 
             await _context.SaveChangesAsync();
         }
+
         /// <summary>
         /// Met a jour l'age moyen des chevaux pour une course donnée.
         /// La clé commune est NumGeny, NumCourse.
@@ -142,6 +144,7 @@ namespace ApiPMU.Services
                 await _context.SaveChangesAsync();
             }
         }
+
         /// <summary>
         /// Enregistre la liste des chevaux pour une course donnée.
         /// La clé commune est NumGeny et pour chaque cheval, la clé se compose de NumGeny, NumCourse et Numero.
@@ -189,12 +192,13 @@ namespace ApiPMU.Services
 
             await _context.SaveChangesAsync();
         }
+
         /// <summary>
         /// Enregistre la liste des chevaux pour une course donnée.
         /// La clé commune est NumGeny et pour chaque cheval, la clé se compose de NumGeny, NumCourse et Numero.
         /// La liste des chevaux est obtenue via ParticipantsParser.ProcessCheval.
         /// </summary>
-        /// <param name="nom">La clé commune pour la réunion/course</param>
+        /// <param name="nom">Le nom du cheval</param>
         /// <param name="datePerf">Le numéro de la course</param>
         /// <param name="discipline">La liste des chevaux à enregistrer</param>
         public async Task SaveOrUpdatePerformanceAsync(IEnumerable<Performance> newPerformances, bool updateColumns = true, bool deleteAndRecreate = false)
@@ -222,8 +226,22 @@ namespace ApiPMU.Services
                     else if (updateColumns)
                     {
                         // Mise à jour sélective des colonnes
-                        existingPerf.Nom = newPerf.Nom;
-                        existingPerf.DatePerf = newPerf.DatePerf;
+                        existingPerf.Allocation = newPerf.Allocation;
+                        existingPerf.Avis = newPerf.Avis;
+                        existingPerf.Cordage = newPerf.Cordage;
+                        existingPerf.Corde = newPerf.Corde;
+                        existingPerf.Cote = newPerf.Cote;
+                        existingPerf.Deferre = newPerf.Deferre;
+                        existingPerf.Discipline = newPerf.Discipline;
+                        existingPerf.Dist = newPerf.Dist;
+                        existingPerf.Gains = newPerf.Gains;
+                        existingPerf.Lieu = newPerf.Lieu;
+                        existingPerf.Partants = newPerf.Partants;
+                        existingPerf.Place = newPerf.Place;
+                        existingPerf.Poid = newPerf.Poid;
+                        existingPerf.RedKDist = newPerf.RedKDist;
+                        existingPerf.TypeCourse = newPerf.TypeCourse;
+                        existingPerf.Video = newPerf.Video;
                         // Mettez à jour d'autres colonnes si nécessaire
                         _context.Performances.Update(existingPerf);
                     }
@@ -231,6 +249,56 @@ namespace ApiPMU.Services
                 else
                 {
                     await _context.Performances.AddAsync(newPerf);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Enregistre la liste des chevaux pour une course donnée.
+        /// La clé commune est NumGeny et pour chaque cheval, la clé se compose de NumGeny, NumCourse et Numero.
+        /// La liste des chevaux est obtenue via ParticipantsParser.ProcessCheval.
+        /// </summary>
+        /// <param name="numGeny">La clé commune pour la réunion/course</param>
+        /// <param name="EntJok">"E" pour Entraîneur et "J" pour Driver/Jockey</param>
+        /// <param name="nom">Le nom de l'entraîneur ou du jokey</param>
+        public async Task SaveOrUpdateEntraineurJokeyAsync(IEnumerable<EntraineurJokey> newEntJok, bool updateColumns = true, bool deleteAndRecreate = false)
+        {
+            if (newEntJok == null)
+                throw new ArgumentNullException(nameof(newEntJok));
+
+            foreach (var newEJ in newEntJok)
+            {
+                // Recherche d'une cheval existant basé sur la clé composite : numGeny, EntJok et Nom
+                var existingEJ = await _context.EntraineurJokey
+                    .FirstOrDefaultAsync(c => c.Nom == newEJ.Nom
+                                           && c.Entjok == newEJ.Entjok
+                                           && c.NumGeny == newEJ.NumGeny);
+
+                if (existingEJ != null)
+                {
+                    if (deleteAndRecreate)
+                    {
+                        _context.EntraineurJokey.Remove(existingEJ);
+                        // Vous pouvez appeler SaveChanges ici si vous souhaitez que la suppression soit immédiate, 
+                        // sinon, elle sera appliquée à la fin avec l'appel global.
+                        await _context.EntraineurJokey.AddAsync(newEJ);
+                    }
+                    else if (updateColumns)
+                    {
+                        // Mise à jour sélective des colonnes
+                        existingEJ.NbCourses = newEJ.NbCourses;
+                        existingEJ.NbVictoires = newEJ.NbVictoires;
+                        existingEJ.NbCR = newEJ.NbCR;
+                        existingEJ.Ecart = newEJ.Ecart;
+                        // Mettez à jour d'autres colonnes si nécessaire
+                        _context.EntraineurJokey.Update(existingEJ);
+                    }
+                }
+                else
+                {
+                    await _context.EntraineurJokey.AddAsync(newEJ);
                 }
             }
 
