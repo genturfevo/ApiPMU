@@ -202,20 +202,20 @@ namespace ApiPMU
 
             // ********************************************************************************************************************* //
             // LE TROT : Chargement des entraineurs                                                                                  //
-            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=1000&ranking_type=ENTR-NEW&sort_by=rank&order_by=asc //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=ENTR-A-NEW&sort_by=rank&order_by=asc //
             // ********************************************************************************************************************* //
             //
             var entTrot = new ListeParticipants();
-            entTrot.EntraineurJokeys = await ExtractEntraineurJockeyTrotRankingAsync("ENTR");
+            entTrot.EntraineurJokeys = await ExtractEntraineurJockeyTrotRankingAsync("ENTR-A");
             _logger.LogInformation("Extraction du classement des entraineurs trot terminée.");
 
             // ********************************************************************************************************************* //
             // LE TROT : Chargement des jockeys - typeIndividu=Entraineur                                                            //
-            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=1000&ranking_type=COOR-NEW&sort_by=rank&order_by=asc //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=SUOR-NEW&sort_by=rank&order_by=asc //
             // ********************************************************************************************************************* //
             //
             var jokTrot = new ListeParticipants();
-            jokTrot.EntraineurJokeys = await ExtractEntraineurJockeyTrotRankingAsync("COOR");
+            jokTrot.EntraineurJokeys = await ExtractEntraineurJockeyTrotRankingAsync("SUOR");
             _logger.LogInformation("Extraction du classement des jockeys trot terminée.");
 
             // *************************************** //
@@ -584,7 +584,8 @@ namespace ApiPMU
                                         NbCourses = entraineurMatch.NbCourses,
                                         NbVictoires = entraineurMatch.NbVictoires,
                                         NbCR = entraineurMatch.NbCR,
-                                        Ecart = entraineurMatch.Ecart
+                                        Ecart = entraineurMatch.Ecart,
+                                        DateModif = DateTime.Now
                                     });
                                 }
                             }
@@ -599,7 +600,8 @@ namespace ApiPMU
                                     NbCourses = 0,
                                     NbVictoires = 0,
                                     NbCR = 0,
-                                    Ecart = 0
+                                    Ecart = 0,
+                                    DateModif = DateTime.Now
                                 });
                                 entraineursNonTrouves.Add(entraineur);
                             }
@@ -629,7 +631,8 @@ namespace ApiPMU
                                         NbCourses = jockeyMatch.NbCourses,
                                         NbVictoires = jockeyMatch.NbVictoires,
                                         NbCR = jockeyMatch.NbCR,
-                                        Ecart = jockeyMatch.Ecart
+                                        Ecart = jockeyMatch.Ecart,
+                                        DateModif = DateTime.Now
                                     });
                                 }
                             }
@@ -644,7 +647,8 @@ namespace ApiPMU
                                     NbCourses = 0,
                                     NbVictoires = 0,
                                     NbCR = 0,
-                                    Ecart = 0
+                                    Ecart = 0,
+                                    DateModif = DateTime.Now
                                 });
                                 jockeysNonTrouves.Add(jockey);
                             }
@@ -677,7 +681,8 @@ namespace ApiPMU
                                         NbCourses = entraineurMatch.NbCourses,
                                         NbVictoires = entraineurMatch.NbVictoires,
                                         NbCR = entraineurMatch.NbCR,
-                                        Ecart = entraineurMatch.Ecart
+                                        Ecart = entraineurMatch.Ecart,
+                                        DateModif = DateTime.Now
                                     });
                                 }
                             }
@@ -692,7 +697,8 @@ namespace ApiPMU
                                     NbCourses = 0,
                                     NbVictoires = 0,
                                     NbCR = 0,
-                                    Ecart = 0
+                                    Ecart = 0,
+                                    DateModif = DateTime.Now
                                 });
                                 entraineursNonTrouves.Add(entraineur);
                             }
@@ -722,7 +728,8 @@ namespace ApiPMU
                                         NbCourses = jockeyMatch.NbCourses,
                                         NbVictoires = jockeyMatch.NbVictoires,
                                         NbCR = jockeyMatch.NbCR,
-                                        Ecart = jockeyMatch.Ecart
+                                        Ecart = jockeyMatch.Ecart,
+                                        DateModif = DateTime.Now
                                     });
                                 }
                             }
@@ -737,7 +744,8 @@ namespace ApiPMU
                                     NbCourses = 0,
                                     NbVictoires = 0,
                                     NbCR = 0,
-                                    Ecart = 0
+                                    Ecart = 0,
+                                    DateModif = DateTime.Now
                                 });
                                 jockeysNonTrouves.Add(jockey);
                             }
@@ -755,6 +763,7 @@ namespace ApiPMU
                     {
                         _logger.LogWarning($"Jockeys non trouvés dans {disc}: {string.Join(", ", jockeysNonTrouves)}");
                     }
+
                     // ******************************** //
                     // BDD : Enregistrement des données //
                     // Table : Entraineurs et Jockeys   //
@@ -925,7 +934,7 @@ namespace ApiPMU
             client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
             client.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
 
-            string url = $"https://www.letrot.com/v1/api/rankings/person?page=1&limit=1000&ranking_type={typeIndividu}-NEW&sort_by=rank&order_by=asc";
+            string url = $"https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type={typeIndividu}-NEW&sort_by=rank&order_by=asc";
 
             try
             {

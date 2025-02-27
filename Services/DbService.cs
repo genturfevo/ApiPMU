@@ -242,6 +242,8 @@ namespace ApiPMU.Services
                         existingPerf.RedKDist = newPerf.RedKDist;
                         existingPerf.TypeCourse = newPerf.TypeCourse;
                         existingPerf.Video = newPerf.Video;
+                        existingPerf.DateModif = DateTime.Now;
+
                         // Mettez à jour d'autres colonnes si nécessaire
                         _context.Performances.Update(existingPerf);
                     }
@@ -272,9 +274,9 @@ namespace ApiPMU.Services
             {
                 // Recherche d'une cheval existant basé sur la clé composite : numGeny, EntJok et Nom
                 var existingEJ = await _context.EntraineurJokey
-                    .FirstOrDefaultAsync(c => c.Nom == newEJ.Nom
+                    .FirstOrDefaultAsync(c => c.NumGeny == newEJ.NumGeny
                                            && c.Entjok == newEJ.Entjok
-                                           && c.NumGeny == newEJ.NumGeny);
+                                           && c.Nom == newEJ.Nom);
 
                 if (existingEJ != null)
                 {
@@ -292,6 +294,7 @@ namespace ApiPMU.Services
                         existingEJ.NbVictoires = newEJ.NbVictoires;
                         existingEJ.NbCR = newEJ.NbCR;
                         existingEJ.Ecart = newEJ.Ecart;
+                        existingEJ.DateModif = DateTime.Now;
                         // Mettez à jour d'autres colonnes si nécessaire
                         _context.EntraineurJokey.Update(existingEJ);
                     }
