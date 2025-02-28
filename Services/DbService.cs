@@ -270,6 +270,12 @@ namespace ApiPMU.Services
             if (newEntJok == null)
                 throw new ArgumentNullException(nameof(newEntJok));
 
+            // Supprimer les doublons basés sur NumGeny, Entjok, et Nom
+            newEntJok = newEntJok
+                .GroupBy(e => new { e.NumGeny, e.Entjok, e.Nom })
+                .Select(g => g.First())
+                .ToList();
+
             foreach (var newEJ in newEntJok)
             {
                 // Recherche d'une cheval existant basé sur la clé composite : numGeny, EntJok et Nom

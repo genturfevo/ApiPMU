@@ -48,15 +48,34 @@ namespace ApiPMU.Services
             request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
             request.Headers.Add("Accept-Language", "en-US,en;q=0.5");
 
-            HttpResponseMessage response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            string jsonString = await response.Content.ReadAsStringAsync();
-            T? result = JsonConvert.DeserializeObject<T>(jsonString);
-            if (result is null)
+            try
             {
-                throw new InvalidOperationException($"La désérialisation a retourné null pour l'URL '{url}'.");
+                HttpResponseMessage response = await _httpClient.SendAsync(request);
+
+                // Vérifier si le statut HTTP est valide
+                if (!response.IsSuccessStatusCode)
+                {
+                    return default; // Retourner un objet par défaut (null pour les types référence)
+                }
+
+                string jsonString = await response.Content.ReadAsStringAsync();
+
+                // Désérialisation du JSON
+                T? result = JsonConvert.DeserializeObject<T>(jsonString);
+
+                // Vérification si la désérialisation retourne null
+                if (result is null)
+                {
+                    return default; // Retourner un objet par défaut (null pour les types référence)
+                }
+
+                return result;
             }
-            return result;
+            catch 
+            {
+                // Capture d'autres types d'exceptions
+                return default; // Retourner un objet par défaut (null pour les types référence)
+            }
         }
 
         public async Task<T> ChargerProgrammeAsync<T>(string dateStr)

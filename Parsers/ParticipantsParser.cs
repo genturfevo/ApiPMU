@@ -72,8 +72,8 @@ namespace ApiPMU.Parsers
                 string corde = participants?["placeCorde"]?.ToString() ?? "0";
                 string sexe = participants?["sexe"]?.ToString().FirstOrDefault().ToString() ?? "H";
                 string age = participants?["age"]?.ToString() ?? "0";
-                string jokey = participants?["driver"]?.ToString() ?? "NON PARTANT";
-                string entraineur = participants?["entraineur"]?.ToString() ?? "NON PARTANT";
+                string jokey = FormatNom(participants?["driver"]?.ToString() ?? string.Empty);
+                string entraineur = FormatNom(participants?["entraineur"]?.ToString() ?? string.Empty);
                 string zoneABC = numero < 7 ? "A" : numero < 13 ? "B" : "C";
                 int nbCourses = participants?["nombreCourses"]?.Value<int>() ?? 0;
                 int nbVictoires = participants?["nombreVictoires"]?.Value<int>() ?? 0;
@@ -134,6 +134,50 @@ namespace ApiPMU.Parsers
                 };
             }
             catch { return null; }
+        }
+        // 
+        // Fonction pour formater le nom
+        // 
+        string FormatNom(string nom)
+        {
+            if (string.IsNullOrEmpty(nom))
+                return "NON PARTANT";
+
+            // Vérifier si le nom contient au moins un "."
+            if (nom.Contains("."))
+            {
+                return nom.Trim(); // Retourne le nom tel quel si déjà formaté correctement
+            }
+            else
+            {
+                // Formater le nom sous la forme "initiale.prenom. initiale2.nom"
+                var nomParts = nom.Split(' '); // Sépare le prénom(s) et le nom
+
+                if (nomParts.Length == 1)
+                {
+                    // Si le nom ne contient qu'un seul mot (nom), ajouter "NON PARTANT"
+                    return $"{nom.Trim()} NON PARTANT";
+                }
+                else if (nomParts.Length == 2)
+                {
+                    // Si un prénom et un nom, formater en "initiale.prenom. nom"
+                    return $"{nomParts[0][0]}. {nomParts[1]}".ToUpper(); // Initiale + nom
+                }
+                else if (nomParts.Length >= 3)
+                {
+                    // Si plusieurs prénoms et un nom composé, formater en "initiale1.initiale2. nom composé"
+                    // Ici, nous séparons prénoms et nom de famille
+                    var prenoms = nomParts.Take(nomParts.Length - 1).ToList();
+                    var nomDeFamille = nomParts.Skip(nomParts.Length - 1).First();
+
+                    // Ajouter initiales des prénoms
+                    string initiales = string.Join(".", prenoms.Select(p => p[0].ToString()).ToArray()) + ".";
+
+                    // Retourner le nom avec initiales et nom de famille
+                    return $"{initiales} {nomDeFamille}".ToUpper();
+                }
+                return "NON PARTANT"; // Si aucun format valable trouvé
+            }
         }
     }
 }

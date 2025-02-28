@@ -14,6 +14,7 @@ using OpenQA.Selenium;
 using WebDriverManager;
 using WebDriverManager.DriverConfigs.Impl;
 using OpenQA.Selenium.DevTools.V131.CSS;
+using AngleSharp.Dom;
 
 namespace ApiPMU
 {
@@ -53,7 +54,7 @@ namespace ApiPMU
             // ************************************************* //
 
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("27022025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            _forcedDate = DateTime.ParseExact("01032025", "ddMMyyyy", CultureInfo.InvariantCulture);
 #else
             _forcedDate = null;
 #endif
@@ -118,6 +119,34 @@ namespace ApiPMU
         private async Task ExecuteExtractionForDate(DateTime targetDate, CancellationToken token)
         {
             string dateStr = targetDate.ToString("ddMMyyyy");
+            // ********************************** //
+            // Envoi du courriel de récapitulatif //
+            // ********************************** //
+            //
+            try
+            {
+                // Création d'un scope pour obtenir une instance de ApiPMUDbContext
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    // Récupération du DbContext généré par le scaffolding
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+
+                    // Paramètres pour l'envoi du courriel
+                    bool flagTRT = false; // Ajustez selon votre logique (exemple : définir à true en cas d'incident)
+                    string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "PRESLESMU";
+                    string subjectPrefix = $"{serveur} : ApiPMU début de traitement pour la journée du {dateStr}";
+                    string log = "Initialisation de la trace log";
+                    var courrielService = new CourrielService(
+                         _serviceProvider.GetRequiredService<ILogger<CourrielService>>(),
+                         _connectionString);
+                    await courrielService.SendCompletionEmailAsync(targetDate, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de l'envoi du courriel de début de traitement.");
+            }
+
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
             // ************************************************************************** //
@@ -174,48 +203,144 @@ namespace ApiPMU
                 _logger.LogInformation("Les données Réunions et Courses ont été enregistrées dans la base de données via DbService.");
             }
 
-            // ******************************************* //
-            // FRANCE-GALOP : Paramètre annuel (year=AAAA) //
-            // ******************************************* //
+            // ******************************************************* //
+            // FRANCE-GALOP : Paramètre annuel entraineurs (year=AAAA) //
+            // ******************************************************* //
             //
             string annee = targetDate.ToString("yyyy");
 
-            // **************************************************************************************************************** //
-            // FRANCE-GALOP : Chargement des entraineurs - typeIndividu=Entraineur                                              //
-            // Url : https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu=Entraineur&year=2025 //
-            //       &specialty=0&racetrack=null&category=6&nbResult=1000                                                       //
-            // **************************************************************************************************************** //
+            // ******************************************************************************************************************************************************************** //
+            // FRANCE-GALOP : Chargement des entraineurs - typeIndividu=Entraineur                                                                                                  //
+            // Url : https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu=Entraineur&year=2025&specialty=0&racetrack=null&category=6&nbResult=1000 //                                                  //
+            // Url : https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu=Entraineur&year=2025&specialty=1&racetrack=null&category=6&nbResult=1000 //                                                    //
+            // ******************************************************************************************************************************************************************** //
             //
             var entGalop = new ListeParticipants();
-            entGalop.EntraineurJokeys = await ExtractEntraineurJockeyGalopRankingAsync("Entraineur", annee);
+            // Fonction pour essayer d'extraire les données et ajuster l'année si nécessaire
+            async Task<ListeParticipants> ExtraireEntraineurAvecAjustementAnnee(string typeIndividu, string annee)
+            {
+                // Tentative d'extraction des données
+                entGalop.EntraineurJokeys = await ExtractEntraineurJockeyGalopRankingAsync(typeIndividu, annee);
+
+                // Si la collection est vide, réduire l'année de 1 et essayer à nouveau
+                if (entGalop.EntraineurJokeys.Count == 0)
+                {
+                    _logger.LogWarning($"Aucun entraîneur trouvé pour l'année {annee}. Tentative avec l'année précédente.");
+
+                    // Soustraire 1 an à l'année
+                    annee = (int.Parse(annee) - 1).ToString();
+
+                    // Relancer l'extraction avec la nouvelle année
+                    entGalop.EntraineurJokeys = await ExtractEntraineurJockeyGalopRankingAsync(typeIndividu, annee);
+                }
+
+                return entGalop;
+            }
+
+            // Appeler la méthode avec l'année initiale pour les entraîneurs
+            entGalop = await ExtraireEntraineurAvecAjustementAnnee("Entraineur", annee);
+
             _logger.LogInformation("Extraction du classement des entraineurs galop terminée.");
 
-            // ************************************************************************************************************ //
-            // FRANCE-GALOP : Chargement des jockeys - typeIndividu=Entraineur                                              //
-            // Url : https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu=Jockey&year=2025 //
-            //       &specialty=0&racetrack=null&category=6&nbResult=1000                                                   //
-            // ************************************************************************************************************ //
+            // *************************************************** //
+            // FRANCE-GALOP : Paramètre annuel jockeys (year=AAAA) //
+            // *************************************************** //
+            //
+            annee = targetDate.ToString("yyyy");
+
+            // **************************************************************************************************************************************************************** //
+            // FRANCE-GALOP : Chargement des jockeys - typeIndividu=Entraineur                                                                                                  //
+            // Url : https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu=Jockey&year=2025&specialty=0&racetrack=null&category=6&nbResult=1000 //                                                  //
+            // Url : https://www.france-galop.com/fr/frglp-global/ajax?module=individu_filter&typeIndividu=Jockey&year=2025&specialty=1&racetrack=null&category=6&nbResult=1000 //                                                  //
+            // **************************************************************************************************************************************************************** //
             //
             var jokGalop = new ListeParticipants();
-            jokGalop.EntraineurJokeys = await ExtractEntraineurJockeyGalopRankingAsync("Jockey", annee);
+            // Fonction pour essayer d'extraire les données et ajuster l'année si nécessaire
+            async Task<ListeParticipants> ExtraireJockeyAvecAjustementAnnee(string typeIndividu, string annee)
+            {
+                // Tentative d'extraction des données
+                jokGalop.EntraineurJokeys = await ExtractEntraineurJockeyGalopRankingAsync(typeIndividu, annee);
+
+                // Si la collection est vide, réduire l'année de 1 et essayer à nouveau
+                if (jokGalop.EntraineurJokeys.Count == 0)
+                {
+                    _logger.LogWarning($"Aucun entraîneur trouvé pour l'année {annee}. Tentative avec l'année précédente.");
+
+                    // Soustraire 1 an à l'année
+                    annee = (int.Parse(annee) - 1).ToString();
+
+                    // Relancer l'extraction avec la nouvelle année
+                    jokGalop.EntraineurJokeys = await ExtractEntraineurJockeyGalopRankingAsync(typeIndividu, annee);
+                }
+
+                return jokGalop;
+            }
+
+            // Appeler la méthode avec l'année initiale pour les entraîneurs
+            jokGalop = await ExtraireJockeyAvecAjustementAnnee("Jockey", annee);
+
             _logger.LogInformation("Extraction du classement des jockeys galop terminée.");
 
-            // ********************************************************************************************************************* //
-            // LE TROT : Chargement des entraineurs                                                                                  //
+            // *********************************************************************************************************************** //
+            // LE TROT : Chargement des entraineurs                                                                                    //
             // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=ENTR-A-NEW&sort_by=rank&order_by=asc //
-            // ********************************************************************************************************************* //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=ENTR-M-NEW&sort_by=rank&order_by=asc //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=ENTR-NEW&sort_by=rank&order_by=asc   //
+            // *********************************************************************************************************************** //
             //
             var entTrot = new ListeParticipants();
-            entTrot.EntraineurJokeys = await ExtractEntraineurJockeyTrotRankingAsync("ENTR-A");
-            _logger.LogInformation("Extraction du classement des entraineurs trot terminée.");
+            // Chargement successif avec les trois types "ENTR-A", "ENTR-M" et "ENTR"
+            var typesIndividu = new[] { "ENTR-A", "ENTR-M", "ENTR" };
+            foreach (var typeIndividu in typesIndividu)
+            {
+                var entraineurs = await ExtractEntraineurJockeyTrotRankingAsync(typeIndividu);
 
-            // ********************************************************************************************************************* //
-            // LE TROT : Chargement des jockeys - typeIndividu=Entraineur                                                            //
-            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=SUOR-NEW&sort_by=rank&order_by=asc //
-            // ********************************************************************************************************************* //
+                // Ajout des entraîneurs au classement si ils n'existent pas déjà
+                foreach (var entraineur in entraineurs)
+                {
+                    var existingEntraineur = entTrot.EntraineurJokeys
+                        .FirstOrDefault(e => e.NumGeny == entraineur.NumGeny
+                                          && e.Entjok == entraineur.Entjok
+                                          && e.Nom == entraineur.Nom);
+
+                    if (existingEntraineur == null)
+                    {
+                        entTrot.EntraineurJokeys.Add(entraineur);
+                    }
+                }
+            }
+
+            _logger.LogInformation("Extraction du classement des entraineurs trot terminée.");
+            // *********************************************************************************************************************** //
+            // LE TROT : Chargement des jockeys - typeIndividu=Entraineur                                                              //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=SUOR-NEW&sort_by=rank&order_by=asc   //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=ETOR-NEW&sort_by=rank&order_by=asc   //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=COOR-NEW&sort_by=rank&order_by=asc   //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=ALJ-A-NEW&sort_by=rank&order_by=asc  //
+            // Url : https://www.letrot.com/v1/api/rankings/person?page=1&limit=2000&ranking_type=AMAT-A-NEW&sort_by=rank&order_by=asc //
+            // *********************************************************************************************************************** //
             //
             var jokTrot = new ListeParticipants();
-            jokTrot.EntraineurJokeys = await ExtractEntraineurJockeyTrotRankingAsync("SUOR");
+            // Chargement successif avec les cinq types "SUOR", "ETOR", "COOR", "ALJ-A" et "AMAT-A"
+            typesIndividu = new[] { "SUOR", "ETOR", "COOR", "ALJ-A", "AMAT-A" };
+            foreach (var typeIndividu in typesIndividu)
+            {
+                var jockeys = await ExtractEntraineurJockeyTrotRankingAsync(typeIndividu);
+
+                // Ajout des jockeys au classement si ils n'existent pas déjà
+                foreach (var jockey in jockeys)
+                {
+                    var existingJockey = entTrot.EntraineurJokeys
+                        .FirstOrDefault(e => e.NumGeny == jockey.NumGeny
+                                          && e.Entjok == jockey.Entjok
+                                          && e.Nom == jockey.Nom);
+
+                    if (existingJockey == null)
+                    {
+                        jokTrot.EntraineurJokeys.Add(jockey);
+                    }
+                }
+            }
             _logger.LogInformation("Extraction du classement des jockeys trot terminée.");
 
             // *************************************** //
@@ -315,236 +440,244 @@ namespace ApiPMU
                     //
                     var performancesData = await _apiPmuService.ChargerPerformancesAsync<dynamic>(dateStr, numReunion, numCourse, "performances-detaillees/pretty");
 
-                    // ******************************************** //
-                    // JSon : Conversion en chaîne JSON pour parser //
-                    // ******************************************** //
-                    //
-                    string performancesJson = JsonConvert.SerializeObject(performancesData);
-
-                    // ******************************************** //
-                    // Parser : Extraction des données participants //
-                    // ******************************************** //
-                    //
-                    ListeParticipants performancesParsed;
-                    using (var scope = _serviceProvider.CreateScope())
+                    // Parfois l'url performances-detaillees/pretty est absente
+                    // Impossible de poursuivre, on passe directement aux entraineurs et jockeys
+                    if (performancesData != null)
                     {
-                        var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
-                        string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
-                        var parser = new PerformancesParser(
-                            _serviceProvider.GetRequiredService<ILogger<PerformancesParser>>(),
-                            _connectionString);
-                        performancesParsed = parser.ParsePerformances(performancesJson, disc);
-                    }
-                    _logger.LogInformation("Performances parsées avec {CountPerformances} entrées.", performancesParsed.Performances.Count);
-
-                    // ***************************************************** //
-                    // Complément des performances : Accès Api PMU programme //
-                    // ***************************************************** //
-                    //
-                    short perfR;
-                    short perfC;
-                    foreach (var perf in performancesParsed.Performances)
-                    {
-                        _logger.LogInformation($"Historique du cheval R{numReunion}C{numCourse}-{perf.Nom}-{perf.DatePerf}");
-                        // Utiliser la date propre à la performance pour charger le programme du jour correspondant
-                        string perfDateStr = perf.DatePerf.ToString("ddMMyyyy");
-                        // Video contient temporairement le nom du prix (nomPrix)
-                        // Pour la recherche de la course historique d'un partant
-                        string nomPrixTemp = perf.Video;
-                        // Pour la recherche du cheval dans la course
-                        string nomCh = perf.Nom;
-                        perfR = 0;
-                        perfC = 0;
-
-                        // ***************************************************************************************** //
-                        // Api PMU : (Performances) Charger le programme correspondant à la date de la performance   //
-                        // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA                //
-                        // ***************************************************************************************** //
-                        //
-                        var programmeJsonForPerfData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(perfDateStr);
-
                         // ******************************************** //
                         // JSon : Conversion en chaîne JSON pour parser //
                         // ******************************************** //
                         //
-                        string programmeJsonForPerfJson = JsonConvert.SerializeObject(programmeJsonForPerfData);
+                        string performancesJson = JsonConvert.SerializeObject(performancesData);
 
-                        // ************************************************ //
-                        // Parser : se caller sur la course de l'historique //
-                        // ************************************************ //
+                        // ******************************************** //
+                        // Parser : Extraction des données participants //
+                        // ******************************************** //
                         //
-                        JObject rdata = JObject.Parse(programmeJsonForPerfJson);
-                        JToken? Jsonprog = rdata["programme"];
-                        if (Jsonprog == null) { 
-                            _logger.LogError("La clé 'programme' est absente du programmeJsonForPerfJson.");
+                        ListeParticipants performancesParsed;
+                        using (var scope = _serviceProvider.CreateScope())
+                        {
+                            var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+                            string connectionString = dbContext.Database.GetDbConnection().ConnectionString;
+                            var parser = new PerformancesParser(
+                                _serviceProvider.GetRequiredService<ILogger<PerformancesParser>>(),
+                                _connectionString);
+                            performancesParsed = parser.ParsePerformances(performancesJson, disc);
                         }
-                        JToken? Jsonreun = Jsonprog["reunions"];
-                        if (Jsonreun == null) { 
-                            _logger.LogError("La clé 'reunions' est absente du programmeJsonForPerfJson.");
-                        }
-                        int allocation = 0;
-                        string cordage = string.Empty;
-                        string conditions = string.Empty;
-                        short partants = 0;
-                        int distance = 0;
+                        _logger.LogInformation("Performances parsées avec {CountPerformances} entrées.", performancesParsed.Performances.Count);
 
-                        bool found = false;
-                        foreach (JToken reunionToken in Jsonreun)
+                        // ***************************************************** //
+                        // Complément des performances : Accès Api PMU programme //
+                        // ***************************************************** //
+                        //
+                        short perfR;
+                        short perfC;
+                        foreach (var perf in performancesParsed.Performances)
                         {
-                            if (reunionToken["courses"] != null)
-                            {
-                                JToken? Jsoncour = reunionToken["courses"];
-                                if (courses != null)
-                                {
-                                    foreach (JToken courseToken in Jsoncour)
-                                    {
-                                        string? libC = courseToken["libelle"]?.ToString();
-                                        string? libL = courseToken["libelleCourt"]?.ToString();
-                                        //
-                                        // Minimum de 60% de correspondance entre :
-                                        // - le nom du prix de l'historique
-                                        // - le libelle de la course
-                                        //
-                                        if ((libC != null && ContainsApproximately(libC, nomPrixTemp, 0.6)) ||
-                                            (libL != null && ContainsApproximately(libL, nomPrixTemp, 0.6)))
-                                        {
-                                            perfR = (short)(short.TryParse(courseToken["numReunion"]?.ToString(), out short nr) ? nr : 0);
-                                            perfC = (short)(short.TryParse(courseToken["numExterne"]?.ToString(), out short nc) ? nc : 0);
-                                            allocation = (int)(int.TryParse(courseToken["montantTotalOffert"]?.ToString(), out int al) ? al : 0);
-                                            cordage = courseToken["corde"]?.ToString() switch
-                                            {
-                                                string s when s.Contains("GAUCHE") => "GAUCHE",
-                                                string s when s.Contains("DROITE") => "DROITE",
-                                                _ => string.Empty
-                                            };
-                                            conditions = courseToken["conditions"]?.ToString() ?? string.Empty;
-                                            partants = (short)(short.TryParse(courseToken["nombreDeclaresPartants"]?.ToString(), out short pa) ? pa : 0);
-                                            distance = (int)(int.TryParse(courseToken["distance"]?.ToString(), out int di) ? di : 0);
-                                            found = true;
-                                            break; // Sort de la boucle interne
-                                        }
-                                    }
-                                }
-                            }
-                            if (found)
-                                break; // Sort de la boucle externe
-                        }
-                        if (found && perfR != 0 && perfC != 0)
-                        {
-                            // ********************************************************************************************* //
-                            // Api PMU : (Performances) Charger les participants d'une course                                //
-                            // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA/Rx/Cx/participants //
-                            // ********************************************************************************************* //
+                            _logger.LogInformation($"Historique du cheval R{numReunion}C{numCourse}-{perf.Nom}-{perf.DatePerf}");
+                            // Utiliser la date propre à la performance pour charger le programme du jour correspondant
+                            string perfDateStr = perf.DatePerf.ToString("ddMMyyyy");
+                            // Video contient temporairement le nom du prix (nomPrix)
+                            // Pour la recherche de la course historique d'un partant
+                            string nomPrixTemp = perf.Video;
+                            // Pour la recherche du cheval dans la course
+                            string nomCh = perf.Nom;
+                            perfR = 0;
+                            perfC = 0;
+
+                            // ***************************************************************************************** //
+                            // Api PMU : (Performances) Charger le programme correspondant à la date de la performance   //
+                            // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA                //
+                            // ***************************************************************************************** //
                             //
-                            var courseJsonForPerfData = await _apiPmuService.ChargerCourseAsync<dynamic>(perfDateStr, perfR, perfC, "participants");
+                            var programmeJsonForPerfData = await _apiPmuService.ChargerProgrammeAsync<dynamic>(perfDateStr);
 
                             // ******************************************** //
                             // JSon : Conversion en chaîne JSON pour parser //
                             // ******************************************** //
                             //
-                            string courseJsonForPerfJson = JsonConvert.SerializeObject(courseJsonForPerfData);
+                            string programmeJsonForPerfJson = JsonConvert.SerializeObject(programmeJsonForPerfData);
 
-                            // ********************************************* //
-                            // Parser : se caller sur le cheval de la course //
-                            // ********************************************* //
+                            // ************************************************ //
+                            // Parser : se caller sur la course de l'historique //
+                            // ************************************************ //
                             //
-                            JObject cdata = JObject.Parse(courseJsonForPerfJson);
-                            JToken? Jsondcou = cdata["participants"];
-                            if (Jsondcou != null)
+                            JObject rdata = JObject.Parse(programmeJsonForPerfJson);
+                            JToken? Jsonprog = rdata["programme"];
+                            if (Jsonprog == null) { 
+                                _logger.LogError("La clé 'programme' est absente du programmeJsonForPerfJson.");
+                            }
+                            JToken? Jsonreun = Jsonprog["reunions"];
+                            if (Jsonreun == null) { 
+                                _logger.LogError("La clé 'reunions' est absente du programmeJsonForPerfJson.");
+                            }
+                            int allocation = 0;
+                            string cordage = string.Empty;
+                            string conditions = string.Empty;
+                            short partants = 0;
+                            int distance = 0;
+
+                            bool found = false;
+                            foreach (JToken reunionToken in Jsonreun)
                             {
-                                foreach (JToken dcourseToken in Jsondcou)
+                                if (reunionToken["courses"] != null)
                                 {
-                                    string? nom = dcourseToken["nom"]?.ToString();
-                                    if (nomCh == nom)
+                                    JToken? Jsoncour = reunionToken["courses"];
+                                    if (courses != null)
                                     {
-                                        JToken? gainsCarriere = dcourseToken?["gainsParticipant"];
-                                        int gains = 0;
-                                        if (gainsCarriere != null && gainsCarriere["gainsCarriere"] != null && int.TryParse(gainsCarriere["gainsCarriere"].ToString(), out int g))
+                                        foreach (JToken courseToken in Jsoncour)
                                         {
-                                            gains = g / 100;
-                                        }
-                                        perf.Gains = gains;
-                                        perf.Cordage = cordage;
-                                        perf.Partants = partants;
-                                        perf.Dist = distance;
-                                        string typeCourse = ProgrammeParser.CategorieCourseScraping(conditions, allocation);
-                                        perf.TypeCourse = typeCourse;
-                                        JToken? dCote = dcourseToken["dernierRapportDirect"];
-                                        float cote = dCote?["rapport"]?.Value<float?>() ?? 0f;
-                                        perf.Cote = cote;
-                                        perf.Deferre = string.Empty;
-                                        if (perf.Discipline == "ATTELE" || perf.Discipline == "MONTE")
-                                        {
-                                            perf.Deferre = dcourseToken?["deferre"]?.ToString() switch
+                                            string? libC = courseToken["libelle"]?.ToString();
+                                            string? libL = courseToken["libelleCourt"]?.ToString();
+                                            //
+                                            // Minimum de 60% de correspondance entre :
+                                            // - le nom du prix de l'historique
+                                            // - le libelle de la course
+                                            //
+                                            if ((libC != null && ContainsApproximately(libC, nomPrixTemp, 0.6)) ||
+                                                (libL != null && ContainsApproximately(libL, nomPrixTemp, 0.6)))
                                             {
-                                                "DEFERRE_ANTERIEURS" => "DA",
-                                                "DEFERRE_POSTERIEURS" => "DP",
-                                                "DEFERRE_ANTERIEURS_POSTERIEURS" => "D4",
-                                                "PROTEGE_ANTERIEURS" => "PA",
-                                                "PROTEGE_POSTERIEURS" => "PP",
-                                                "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
-                                                "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
-                                                "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
+                                                perfR = (short)(short.TryParse(courseToken["numReunion"]?.ToString(), out short nr) ? nr : 0);
+                                                perfC = (short)(short.TryParse(courseToken["numExterne"]?.ToString(), out short nc) ? nc : 0);
+                                                allocation = (int)(int.TryParse(courseToken["montantTotalOffert"]?.ToString(), out int al) ? al : 0);
+                                                cordage = courseToken["corde"]?.ToString() switch
+                                                {
+                                                    string s when s.Contains("GAUCHE") => "GAUCHE",
+                                                    string s when s.Contains("DROITE") => "DROITE",
+                                                    _ => string.Empty
+                                                };
+                                                conditions = courseToken["conditions"]?.ToString() ?? string.Empty;
+                                                partants = (short)(short.TryParse(courseToken["nombreDeclaresPartants"]?.ToString(), out short pa) ? pa : 0);
+                                                distance = (int)(int.TryParse(courseToken["distance"]?.ToString(), out int di) ? di : 0);
+                                                found = true;
+                                                break; // Sort de la boucle interne
+                                            }
+                                        }
+                                    }
+                                }
+                                if (found)
+                                    break; // Sort de la boucle externe
+                            }
+                            if (found && perfR != 0 && perfC != 0)
+                            {
+                                // ********************************************************************************************* //
+                                // Api PMU : (Performances) Charger les participants d'une course                                //
+                                // URL : https://online.turfinfo.api.pmu.fr/rest/client/66/programme/JJMMAAAA/Rx/Cx/participants //
+                                // ********************************************************************************************* //
+                                //
+                                var courseJsonForPerfData = await _apiPmuService.ChargerCourseAsync<dynamic>(perfDateStr, perfR, perfC, "participants");
+
+                                // ******************************************** //
+                                // JSon : Conversion en chaîne JSON pour parser //
+                                // ******************************************** //
+                                //
+                                string courseJsonForPerfJson = JsonConvert.SerializeObject(courseJsonForPerfData);
+
+                                // ********************************************* //
+                                // Parser : se caller sur le cheval de la course //
+                                // ********************************************* //
+                                //
+                                JObject cdata = JObject.Parse(courseJsonForPerfJson);
+                                JToken? Jsondcou = cdata["participants"];
+                                if (Jsondcou != null)
+                                {
+                                    foreach (JToken dcourseToken in Jsondcou)
+                                    {
+                                        string? nom = dcourseToken["nom"]?.ToString();
+                                        if (nomCh == nom)
+                                        {
+                                            JToken? gainsCarriere = dcourseToken?["gainsParticipant"];
+                                            int gains = 0;
+                                            if (gainsCarriere != null && gainsCarriere["gainsCarriere"] != null && int.TryParse(gainsCarriere["gainsCarriere"].ToString(), out int g))
+                                            {
+                                                gains = g / 100;
+                                            }
+                                            perf.Gains = gains;
+                                            perf.Cordage = cordage;
+                                            perf.Partants = partants;
+                                            perf.Dist = distance;
+                                            string typeCourse = ProgrammeParser.CategorieCourseScraping(conditions, allocation);
+                                            perf.TypeCourse = typeCourse;
+                                            JToken? dCote = dcourseToken["dernierRapportDirect"];
+                                            float cote = dCote?["rapport"]?.Value<float?>() ?? 0f;
+                                            perf.Cote = cote;
+                                            perf.Deferre = string.Empty;
+                                            if (perf.Discipline == "ATTELE" || perf.Discipline == "MONTE")
+                                            {
+                                                perf.Deferre = dcourseToken?["deferre"]?.ToString() switch
+                                                {
+                                                    "DEFERRE_ANTERIEURS" => "DA",
+                                                    "DEFERRE_POSTERIEURS" => "DP",
+                                                    "DEFERRE_ANTERIEURS_POSTERIEURS" => "D4",
+                                                    "PROTEGE_ANTERIEURS" => "PA",
+                                                    "PROTEGE_POSTERIEURS" => "PP",
+                                                    "PROTEGE_ANTERIEURS_POSTERIEURS" => "P4",
+                                                    "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS" => "PA DP",
+                                                    "DEFERRRE_ANTERIEURS_PROTEGE_POSTERIEURS" => "DA PP",
+                                                    _ => string.Empty
+                                                };
+                                            }
+                                            else
+                                            {
+                                                perf.Deferre = dcourseToken?["handicapValeur"]?.ToString() ?? string.Empty;
+                                            }
+                                            // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
+                                            string avisEntraineur = dcourseToken?["avisEntraineur"]?.ToString() ?? string.Empty;
+                                            string avis = avisEntraineur switch
+                                            {
+                                                "POSITIF" => "avis_1.png",
+                                                "NEUTRE" => "avis_2.png",
+                                                "NEGATIF" => "avis_3.png",
                                                 _ => string.Empty
                                             };
+                                            perf.Avis = avis;
+                                            break;
                                         }
-                                        else
-                                        {
-                                            perf.Deferre = dcourseToken?["handicapValeur"]?.ToString() ?? string.Empty;
-                                        }
-                                        // avis_1.png : vert, avis_2.png : jaune, avis_3.png : rouge
-                                        string avisEntraineur = dcourseToken?["avisEntraineur"]?.ToString() ?? string.Empty;
-                                        string avis = avisEntraineur switch
-                                        {
-                                            "POSITIF" => "avis_1.png",
-                                            "NEUTRE" => "avis_2.png",
-                                            "NEGATIF" => "avis_3.png",
-                                            _ => string.Empty
-                                        };
-                                        perf.Avis = avis;
-                                        break;
                                     }
+                                }
+                                else
+                                {
+                                    perf.Gains = 0;
+                                    perf.Cordage = string.Empty;
+                                    if (allocation > 0)
+                                    {
+                                        perf.TypeCourse = ProgrammeParser.CategorieCourseScraping("", allocation);
+                                    }
+                                    else
+                                    {
+                                        perf.TypeCourse = "G";
+                                    }
+                                    perf.Cote = 0;
+                                    perf.Deferre = string.Empty;
+                                    perf.Avis = string.Empty;
+                                    _logger.LogError("La clé 'participants' est absente du courseJsonForPerfJson.");
                                 }
                             }
                             else
                             {
                                 perf.Gains = 0;
                                 perf.Cordage = string.Empty;
-                                if (allocation > 0)
-                                {
-                                    perf.TypeCourse = ProgrammeParser.CategorieCourseScraping("", allocation);
-                                }
-                                else
-                                {
-                                    perf.TypeCourse = "G";
-                                }
+                                perf.TypeCourse = "G";
                                 perf.Cote = 0;
+                                perf.Partants = 0;
                                 perf.Deferre = string.Empty;
                                 perf.Avis = string.Empty;
-                                _logger.LogError("La clé 'participants' est absente du courseJsonForPerfJson.");
+                                _logger.LogError($"La réunion/course est absente {!found} && numReunion {perfR} && numCourse {perfC}.");
                             }
                         }
-                        else
-                        {
-                            perf.Gains = 0;
-                            perf.Cordage = string.Empty;
-                            perf.TypeCourse = "G";
-                            perf.Cote = 0;
-                            perf.Partants = 0;
-                            perf.Deferre = string.Empty;
-                            perf.Avis = string.Empty;
-                            _logger.LogError($"La réunion/course est absente {!found} && numReunion {perfR} && numCourse {perfC}.");
-                        }
+
+                        // ******************************** //
+                        // BDD : Enregistrement des données //
+                        // Table : Performances             //
+                        // ******************************** //
+                        //
+                        await dbService.SaveOrUpdatePerformanceAsync(performancesParsed.Performances, updateColumns: true, deleteAndRecreate: true);
+                        _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
+
                     }
-
-                    // ******************************** //
-                    // BDD : Enregistrement des données //
-                    // Table : Performances             //
-                    // ******************************** //
-                    //
-                    await dbService.SaveOrUpdatePerformanceAsync(performancesParsed.Performances, updateColumns: true, deleteAndRecreate: true);
-                    _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
-
+                    else{
+                        _logger.LogError($"Erreur lors de l'appel API pour l'URL 'performances-detaillees/pretty' R{numReunion}C{numCourse}");
+                    }
                     // ************************************************************************************* //
                     // Récupération des entraîneurs et jockeys de la course en cours dans la base de données //
                     // ************************************************************************************* //
@@ -790,9 +923,9 @@ namespace ApiPMU
 
                     // Paramètres pour l'envoi du courriel
                     bool flagTRT = false; // Ajustez selon votre logique (exemple : définir à true en cas d'incident)
-                    string subjectPrefix = "ApiPMU Fin de traitement";
-                    string log = "Traitement terminé avec succès."; // Vous pouvez construire ce log en fonction des traitements effectués
                     string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "PRESLESMU";
+                    string subjectPrefix = $"{serveur} : ApiPMU Fin de traitement";
+                    string log = "Traitement terminé avec succès."; // Vous pouvez construire ce log en fonction des traitements effectués
                     var courrielService = new CourrielService(
                          _serviceProvider.GetRequiredService<ILogger<CourrielService>>(),
                          _connectionString);
@@ -951,6 +1084,10 @@ namespace ApiPMU
 
                 ListeParticipants participants = new ListeParticipants();
 
+                // Définir des tranches pour le ratio NbCourses / NbVictoires
+                var bins = new List<int> { 0, 10, 20, 50, 100, 200, 500, 1000 };
+                var labels = new List<string> { "0-10", "11-20", "21-50", "51-100", "101-200", "201-500", "501-1000" };
+
                 foreach (var ranking in rankings)
                 {
                     EntraineurJokey entJok = new EntraineurJokey
@@ -958,12 +1095,22 @@ namespace ApiPMU
                         NumGeny = string.Empty,
                         Entjok = char.ToUpper(typeIndividu[0]).ToString(),
                         Nom = ranking.PersonLabel.ToUpper().Replace("&AMP;", "&"),
-                        NbCourses = ranking.NbRaces,
-                        NbVictoires = ranking.NbVictories,
+                        NbCourses = ranking.NbRaces ?? 0,
+                        NbVictoires = ranking.NbVictories ?? 0,
                         NbCR = 0, // Valeur par défaut (pas disponible dans le JSON)
                         Ecart = 0
                     };
 
+                    // Calculer le ratio NbCourses / NbVictoires (éviter la division par zéro)
+                    double ratio = (double)(entJok.NbCourses) / (double)(entJok.NbVictoires == 0 ? 1 : entJok.NbVictoires);
+
+                    // Déterminer dans quelle tranche le ratio tombe
+                    string range = DetermineRange(ratio, bins);
+
+                    // Calculer la valeur NbCR basée sur le ratio et la tranche
+                    entJok.NbCR = (short?)CalculateNbCR(ratio, range);
+
+                    // Ajouter l'entraîneur à la liste
                     participants.EntraineurJokeys.Add(entJok);
                 }
 
@@ -975,6 +1122,40 @@ namespace ApiPMU
                 _logger.LogError($"Erreur lors de l'extraction du classement des {typeIndividu}s : {ex.Message}");
                 return new List<EntraineurJokey>();
             }
+        }
+
+        // Fonction pour déterminer dans quelle tranche de valeurs le ratio tombe
+        private string DetermineRange(double ratio, List<int> bins)
+        {
+            for (int i = 0; i < bins.Count - 1; i++)
+            {
+                if (ratio >= bins[i] && ratio < bins[i + 1])
+                {
+                    return $"{bins[i]}-{bins[i + 1]}";
+                }
+            }
+            return "501-1000"; // Si le ratio est supérieur à 1000, on le classe dans la dernière tranche
+        }
+
+        // Fonction pour calculer NbCR en fonction du ratio et de la tranche
+        private double CalculateNbCR(double ratio, string range)
+        {
+            // Exemple simple : utiliser le ratio directement comme NbCR ou ajuster en fonction de la tranche
+            double cr = ratio; // Par défaut, utiliser le ratio comme valeur de NbCR
+
+            // Appliquer des ajustements basés sur les tranches (si nécessaire)
+            // Exemple d'ajustement (facultatif)
+            if (range == "0-10")
+            {
+                cr *= 1.1; // Ajuster en fonction de la tranche, exemple d'ajustement
+            }
+            else if (range == "11-20")
+            {
+                cr *= 1.05;
+            }
+            // Ajoutez d'autres ajustements si nécessaire pour les autres tranches
+
+            return cr;
         }
         private class TrotRanking
         {
