@@ -1097,18 +1097,9 @@ namespace ApiPMU
                         Nom = ranking.PersonLabel.ToUpper().Replace("&AMP;", "&"),
                         NbCourses = ranking.NbRaces ?? 0,
                         NbVictoires = ranking.NbVictories ?? 0,
-                        NbCR = 0, // Valeur par défaut (pas disponible dans le JSON)
+                        NbCR = (short?)(ranking.NbRaces.HasValue ? (short)Math.Round(0.3 * ranking.NbRaces.Value) : (short?)null),
                         Ecart = 0
                     };
-
-                    // Calculer le ratio NbCourses / NbVictoires (éviter la division par zéro)
-                    double ratio = (double)(entJok.NbCourses) / (double)(entJok.NbVictoires == 0 ? 1 : entJok.NbVictoires);
-
-                    // Déterminer dans quelle tranche le ratio tombe
-                    string range = DetermineRange(ratio, bins);
-
-                    // Calculer la valeur NbCR basée sur le ratio et la tranche
-                    entJok.NbCR = (short?)CalculateNbCR(ratio, range);
 
                     // Ajouter l'entraîneur à la liste
                     participants.EntraineurJokeys.Add(entJok);
@@ -1122,40 +1113,6 @@ namespace ApiPMU
                 _logger.LogError($"Erreur lors de l'extraction du classement des {typeIndividu}s : {ex.Message}");
                 return new List<EntraineurJokey>();
             }
-        }
-
-        // Fonction pour déterminer dans quelle tranche de valeurs le ratio tombe
-        private string DetermineRange(double ratio, List<int> bins)
-        {
-            for (int i = 0; i < bins.Count - 1; i++)
-            {
-                if (ratio >= bins[i] && ratio < bins[i + 1])
-                {
-                    return $"{bins[i]}-{bins[i + 1]}";
-                }
-            }
-            return "501-1000"; // Si le ratio est supérieur à 1000, on le classe dans la dernière tranche
-        }
-
-        // Fonction pour calculer NbCR en fonction du ratio et de la tranche
-        private double CalculateNbCR(double ratio, string range)
-        {
-            // Exemple simple : utiliser le ratio directement comme NbCR ou ajuster en fonction de la tranche
-            double cr = ratio; // Par défaut, utiliser le ratio comme valeur de NbCR
-
-            // Appliquer des ajustements basés sur les tranches (si nécessaire)
-            // Exemple d'ajustement (facultatif)
-            if (range == "0-10")
-            {
-                cr *= 1.1; // Ajuster en fonction de la tranche, exemple d'ajustement
-            }
-            else if (range == "11-20")
-            {
-                cr *= 1.05;
-            }
-            // Ajoutez d'autres ajustements si nécessaire pour les autres tranches
-
-            return cr;
         }
         private class TrotRanking
         {
@@ -1262,7 +1219,6 @@ namespace ApiPMU
         /// </summary>
         /// <param name="nomRecherche">Nom de l'entraineur ou du jokey recherché.</param>
         /// <param name="listeEntraineurs">liste des noms d'entraineur ou jokey pour la recherche.</param>
-     
         public static string TrouverMeilleurMatch(string nomRecherche, List<string> listeEntraineurs)
         {
             string meilleurMatch = string.Empty;
@@ -1278,8 +1234,21 @@ namespace ApiPMU
                 }
             }
 
-            return meilleurMatch;
-        }        
+            // ✅ 1️⃣ Vérifier si le meilleur match est suffisamment proche
+            if (!string.IsNullOrEmpty(meilleurMatch))
+            {
+                int longueurMax = Math.Max(nomRecherche.Length, meilleurMatch.Length);
+                int seuil = longueurMax / 3; // ⚠ Si la distance > 1/3 de la longueur, ce n'est pas un bon match
+
+                if (scoreMax > seuil)
+                {
+                    return string.Empty; // 🔴 Pas de correspondance fiable
+                }
+            }
+
+            return meilleurMatch; // 🟢 Correspondance valide
+        }
+
         /// <summary>
         /// Méthode de calcul de similarité entre 2 chaînes de caractères 
         /// </summary>
