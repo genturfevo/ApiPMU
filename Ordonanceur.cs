@@ -21,16 +21,24 @@ namespace ApiPMU
     /// <summary>
     /// Service hébergé qui exécute l'extraction des données des API PMU.
     /// En mode normal, il s'exécute tous les jours à 00h01 pour télécharger les données de j+1.
-    /// En mode débogage, si une date forcée est spécifiée ci-dessous, il l'exécute immédiatement.
+    /// En mode débogage, si une date forcée ou une plage de dates est spécifiée, 
+    /// il exécute immédiatement l'extraction et, éventuellement, le traitement RubPTMN.
     /// À la fin du traitement, un courriel récapitulatif est envoyé.
     /// </summary>
     public class Ordonanceur : BackgroundService
     {
         private readonly IApiPmuService _apiPmuService;
         private readonly ILogger<Ordonanceur> _logger;
-        private readonly DateTime? _forcedDate;
         private readonly IServiceProvider _serviceProvider;
         private readonly string _connectionString;
+
+        // Champs pour le mode Debug permettant de forcer l'exécution pour une date ou une plage de dates
+        private readonly DateTime? _forcedDate;
+        private readonly (DateTime start, DateTime end)? _forcedDateRange;
+        // Flag pour activer l'appel de RubPTMN en mode Debug
+        private readonly bool _runRubPTMN;
+        // Flag pour activer l'appel de ApiPMU en mode Debug
+        private readonly bool _apiPMU;
 
         public Ordonanceur(IApiPmuService apiPmuService,
                            ILogger<Ordonanceur> logger,
@@ -41,22 +49,42 @@ namespace ApiPMU
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
-            // Vérification de la chaîne de connexion
             if (string.IsNullOrWhiteSpace(connectionString))
             {
                 throw new ArgumentException("La chaîne de connexion ne peut pas être vide.", nameof(connectionString));
             }
             _connectionString = connectionString;
 
-            // ************************************************* //
-            //      (utilisable uniquement en mode débogage)     //
-            // Paramétrage de la date du programme à télécharger //
-            // ************************************************* //
-
+            // ******************************************************** //
+            //      (utilisable uniquement en mode débogage)            //
+            // Paramétrage de la date ou de la plage de dates à traiter //
+            // ainsi que l'activation de RubPTMN                        //
+            // ******************************************************** //
 #if DEBUG
-            _forcedDate = DateTime.ParseExact("01032025", "ddMMyyyy", CultureInfo.InvariantCulture);
+            // Exemple de paramètre à modifier pour forcer une date simple ou une plage :
+            // Pour une date unique : "01032025"
+            // Pour une plage de dates : "01032025-05032025"
+            string forcedParam = "28022025-10032025"; // <-- modifiez cette valeur selon vos besoins
+            if (forcedParam.Contains("-"))
+            {
+                var parts = forcedParam.Split('-');
+                DateTime start = DateTime.ParseExact(parts[0], "ddMMyyyy", CultureInfo.InvariantCulture);
+                DateTime end = DateTime.ParseExact(parts[1], "ddMMyyyy", CultureInfo.InvariantCulture);
+                _forcedDateRange = (start, end);
+                _forcedDate = null;
+            }
+            else
+            {
+                _forcedDate = DateTime.ParseExact(forcedParam, "ddMMyyyy", CultureInfo.InvariantCulture);
+                _forcedDateRange = null;
+            }
+            // Activation du traitement ApiPMU en mode Debug (si true, l'extraction sera exécuté, sinon false )
+            // Activation du traitement RubPTMN en mode Debug (si true, RubPTMN sera exécuté après l'extraction, sinon false )
+            _apiPMU = true;
+            _runRubPTMN = true;
 #else
             _forcedDate = null;
+            _forcedDateRange = null;
 #endif
         }
 
@@ -64,36 +92,82 @@ namespace ApiPMU
         {
             _logger.LogInformation("Service Ordonanceur démarré.");
 
-            // Si une date forcée est spécifiée, l'exécuter immédiatement et sortir.
-            if (_forcedDate.HasValue) {
-                _logger.LogInformation("Exécution forcée pour la date {ForcedDate}.", _forcedDate.Value.ToString("ddMMyyyy"));
-                await ExecuteExtractionForDate(_forcedDate.Value, stoppingToken);
-                _logger.LogInformation("Exécution forcée terminée. Arrêt du service.");
+#if DEBUG
+            // En mode Debug, si une date forcée ou une plage est spécifiée, traiter immédiatement
+            if (_forcedDate.HasValue || _forcedDateRange.HasValue)
+            {
+                List<DateTime> datesToProcess = new List<DateTime>();
+                if (_forcedDateRange.HasValue)
+                {
+                    for (DateTime d = _forcedDateRange.Value.start; d <= _forcedDateRange.Value.end; d = d.AddDays(1))
+                    {
+                        datesToProcess.Add(d);
+                    }
+                }
+                else
+                {
+#pragma warning disable CS8629 // Le type valeur Nullable peut avoir une valeur null.
+                    datesToProcess.Add(_forcedDate.Value);
+#pragma warning restore CS8629 // Le type valeur Nullable peut avoir une valeur null.
+                }
+
+                foreach (var date in datesToProcess)
+                {
+                    _logger.LogInformation("Exécution forcée pour la date {ForcedDate}.", date.ToString("ddMMyyyy"));
+                    if (_apiPMU)
+                    {
+                        _logger.LogInformation("Exécution de ApiPMU pour la date {ForcedDate}.", date.ToString("ddMMyyyy"));
+                        await ExecuteExtractionForDate(date, stoppingToken);
+                    }
+                    if (_runRubPTMN)
+                    {
+                        // Appel de RubPTMN pour le calcul des indices pour la date en cours
+                        using (var scope = _serviceProvider.CreateScope())
+                        {
+                            var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+                            var rubPTMN = new RubPTMN(dbContext);
+                            _logger.LogInformation("Exécution de RubPTMN pour la date {ForcedDate}.", date.ToString("ddMMyyyy"));
+                            await rubPTMN.ProcessCalculsAsync(date);
+                        }
+                    }
+                }
+                _logger.LogInformation("Exécution forcée terminée pour toutes les dates. Arrêt du service.");
                 return;
             }
+#endif
 
-            // Sinon, exécution planifiée quotidienne
-            while (!stoppingToken.IsCancellationRequested) {
-                try {
-                    // ********************************************** //
-                    // Calcul du prochain horaire d'exécution à 00h01 //
-                    // ********************************************** //
-                    //
+            // En mode normal, exécution planifiée quotidienne
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    // Calcul du prochain horaire d'exécution à 00h01
                     DateTime now = DateTime.Now;
                     DateTime nextRunTime = new DateTime(now.Year, now.Month, now.Day, 0, 1, 0);
-                    if (now >= nextRunTime) {
+                    if (now >= nextRunTime)
+                    {
                         nextRunTime = nextRunTime.AddDays(1);
                     }
 
                     TimeSpan delay = nextRunTime - now;
                     _logger.LogInformation("Prochaine exécution prévue dans {Delay} à {NextRunTime}.", delay, nextRunTime);
 
-                    // Attendre jusqu'au prochain horaire (avec gestion de l'annulation)
+                    // Attente jusqu'au prochain horaire (avec gestion de l'annulation)
                     await Task.Delay(delay, stoppingToken);
 
-                    // Exécuter l'extraction pour la date j+1
-                    DateTime targetDate = DateTime.Today.AddDays(1);
-                    await ExecuteExtractionForDate(targetDate, stoppingToken);
+                    // Exécution de l'extraction pour la date j+1
+                    DateTime dateProno = DateTime.Today.AddDays(1);
+                    await ExecuteExtractionForDate(dateProno, stoppingToken);
+                    _logger.LogInformation("***** ApiPMU Terminé pour la date {ForcedDate} *****.", dateProno);
+
+                    // Appel de RubPTMN pour le calcul des indices pour la date en cours
+                    using (var scope = _serviceProvider.CreateScope())
+                    {
+                        var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+                        var rubPTMN = new RubPTMN(dbContext);
+                        await rubPTMN.ProcessCalculsAsync(dateProno);
+                        _logger.LogInformation("***** RubPTMN Terminé pour la date {ForcedDate} *****.", dateProno);
+                    }
                 }
                 catch (TaskCanceledException)
                 {
@@ -102,23 +176,21 @@ namespace ApiPMU
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Erreur lors de l'exécution du téléchargement quotidien des données PMU.");
-                    // En cas d'erreur, attendre 1 minute avant de retenter
                     await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
                 }
             }
 
             _logger.LogInformation("Service Ordonanceur arrêté.");
         }
-
         /// <summary>
         /// Méthode d'extraction pour une date donnée.
         /// À la fin du traitement, un courriel récapitulatif est envoyé.
         /// </summary>
-        /// <param name="targetDate">Date pour laquelle extraire les données.</param>
+        /// <param name="dateProno">Date pour laquelle extraire les données.</param>
         /// <param name="token">Token d'annulation.</param>
-        private async Task ExecuteExtractionForDate(DateTime targetDate, CancellationToken token)
+        private async Task ExecuteExtractionForDate(DateTime dateProno, CancellationToken token)
         {
-            string dateStr = targetDate.ToString("ddMMyyyy");
+            string dateStr = dateProno.ToString("ddMMyyyy");
             // ********************************** //
             // Envoi du courriel de récapitulatif //
             // ********************************** //
@@ -139,7 +211,7 @@ namespace ApiPMU
                     var courrielService = new CourrielService(
                          _serviceProvider.GetRequiredService<ILogger<CourrielService>>(),
                          _connectionString);
-                    await courrielService.SendCompletionEmailAsync(targetDate, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
+                    await courrielService.SendCompletionEmailAsync(dateProno, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
                 }
             }
             catch (Exception ex)
@@ -207,7 +279,7 @@ namespace ApiPMU
             // FRANCE-GALOP : Paramètre annuel entraineurs (year=AAAA) //
             // ******************************************************* //
             //
-            string annee = targetDate.ToString("yyyy");
+            string annee = dateProno.ToString("yyyy");
 
             // ******************************************************************************************************************************************************************** //
             // FRANCE-GALOP : Chargement des entraineurs - typeIndividu=Entraineur                                                                                                  //
@@ -246,7 +318,7 @@ namespace ApiPMU
             // FRANCE-GALOP : Paramètre annuel jockeys (year=AAAA) //
             // *************************************************** //
             //
-            annee = targetDate.ToString("yyyy");
+            annee = dateProno.ToString("yyyy");
 
             // **************************************************************************************************************************************************************** //
             // FRANCE-GALOP : Chargement des jockeys - typeIndividu=Entraineur                                                                                                  //
@@ -355,7 +427,7 @@ namespace ApiPMU
                 return;
             }
 
-            var reunions = await dbService.GetReunionsByDateAsync(targetDate);
+            var reunions = await dbService.GetReunionsByDateAsync(dateProno);
             if (reunions == null || !reunions.Any())
             {
                 _logger.LogInformation($"Aucune réunion trouvée pour la date {dateStr}");
@@ -909,6 +981,19 @@ namespace ApiPMU
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
+            //// ************************************************************************ //
+            //// Appel de RubPTMN : Calcul des rubriques Paris-Turf et Michel Nostradamus //
+            //// ************************************************************************ //
+            ////
+            //_logger.LogInformation("Début du traitement des calculs via RubPTMN pour la date {DateStr}.", dateStr);
+            //using (var scope = _serviceProvider.CreateScope())
+            //{
+            //    var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+            //    var rubPTMN = new RubPTMN(dbContext);
+            //    await rubPTMN.ProcessCalculsAsync(dateProno);
+            //}
+            //_logger.LogInformation("Traitement des calculs terminé via RubPTMN pour la date {DateStr}.", dateStr);
+
             // ********************************** //
             // Envoi du courriel de récapitulatif //
             // ********************************** //
@@ -929,7 +1014,7 @@ namespace ApiPMU
                     var courrielService = new CourrielService(
                          _serviceProvider.GetRequiredService<ILogger<CourrielService>>(),
                          _connectionString);
-                    await courrielService.SendCompletionEmailAsync(targetDate, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
+                    await courrielService.SendCompletionEmailAsync(dateProno, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
                 }
             }
             catch (Exception ex)
