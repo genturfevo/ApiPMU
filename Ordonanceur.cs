@@ -160,7 +160,7 @@ namespace ApiPMU
                     await ExecuteExtractionForDate(dateProno, stoppingToken);
                     _logger.LogInformation("***** ApiPMU Terminé pour la date {ForcedDate} *****.", dateProno);
 
-                    // Appel de RubPTMN pour le calcul des indices pour la date en cours
+                    // Appel de RubPTMN pour le calcul des rubriques pour la date en cours
                     using (var scope = _serviceProvider.CreateScope())
                     {
                         var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
@@ -981,19 +981,6 @@ namespace ApiPMU
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
-            //// ************************************************************************ //
-            //// Appel de RubPTMN : Calcul des rubriques Paris-Turf et Michel Nostradamus //
-            //// ************************************************************************ //
-            ////
-            //_logger.LogInformation("Début du traitement des calculs via RubPTMN pour la date {DateStr}.", dateStr);
-            //using (var scope = _serviceProvider.CreateScope())
-            //{
-            //    var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
-            //    var rubPTMN = new RubPTMN(dbContext);
-            //    await rubPTMN.ProcessCalculsAsync(dateProno);
-            //}
-            //_logger.LogInformation("Traitement des calculs terminé via RubPTMN pour la date {DateStr}.", dateStr);
-
             // ********************************** //
             // Envoi du courriel de récapitulatif //
             // ********************************** //
@@ -1110,7 +1097,7 @@ namespace ApiPMU
                             EntraineurJokey entJok = new EntraineurJokey
                             {
                                 NumGeny = string.Empty,
-                                Entjok = char.ToUpper(typeIndividu[0]).ToString(),
+                                Entjok = char.ToUpper(typeIndividu[0]).ToString().Replace("'", " "),
                                 Nom = nomIndividu,
                                 NbCourses = nbCourses,
                                 NbVictoires = nbVictoires,
@@ -1179,7 +1166,7 @@ namespace ApiPMU
                     {
                         NumGeny = string.Empty,
                         Entjok = char.ToUpper(typeIndividu[0]).ToString(),
-                        Nom = ranking.PersonLabel.ToUpper().Replace("&AMP;", "&"),
+                        Nom = ranking.PersonLabel.ToUpper().Replace("&AMP;", "&").Replace("'", " "),
                         NbCourses = ranking.NbRaces ?? 0,
                         NbVictoires = ranking.NbVictories ?? 0,
                         NbCR = (short?)(ranking.NbRaces.HasValue ? (short)Math.Round(0.3 * ranking.NbRaces.Value) : (short?)null),
