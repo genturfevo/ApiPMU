@@ -93,7 +93,6 @@ namespace ApiPMU.Services
                 else if (updateColumns)
                 {
                     // Mettre à jour les colonnes souhaitées
-                    existingCourse.Discipline = newCourse.Discipline;
                     existingCourse.Difficulte = newCourse.Difficulte;
                     existingCourse.Libelle = newCourse.Libelle;
                     existingCourse.Distance = newCourse.Distance;
@@ -178,8 +177,7 @@ namespace ApiPMU.Services
                     else if (updateColumns)
                     {
                         // Mise à jour sélective des colonnes
-                        existingCheval.Nom = newCheval.Nom;
-                        existingCheval.SexAge = newCheval.SexAge;
+                        existingCheval.Nom = newCheval.Nom.ToUpper().Replace("'", " ");
                         // Mettez à jour d'autres colonnes si nécessaire
                         _context.Chevaux.Update(existingCheval);
                     }

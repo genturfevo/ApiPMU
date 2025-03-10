@@ -64,7 +64,7 @@ namespace ApiPMU
             // Exemple de paramètre à modifier pour forcer une date simple ou une plage :
             // Pour une date unique : "01032025"
             // Pour une plage de dates : "01032025-05032025"
-            string forcedParam = "28022025-10032025"; // <-- modifiez cette valeur selon vos besoins
+            string forcedParam = "28022025-11032025"; // <-- modifiez cette valeur selon vos besoins
             if (forcedParam.Contains("-"))
             {
                 var parts = forcedParam.Split('-');
@@ -263,13 +263,13 @@ namespace ApiPMU
                 // Pour chaque réunion parsée, effectue un upsert via DbService.
                 foreach (var reunion in programmeParsed.Reunions)
                 {
-                    await dbSvc.SaveOrUpdateReunionAsync(reunion, updateColumns: true);
+                    await dbSvc.SaveOrUpdateReunionAsync(reunion, deleteAndRecreate: true);
                 }
 
                 // Pour chaque course parsée, effectue un upsert et met à jour l'âge moyen.
                 foreach (var course in programmeParsed.Courses)
                 {
-                    await dbSvc.SaveOrUpdateCourseAsync(course, updateColumns: true);
+                    await dbSvc.SaveOrUpdateCourseAsync(course, deleteAndRecreate: true);
                 }
 
                 _logger.LogInformation("Les données Réunions et Courses ont été enregistrées dans la base de données via DbService.");
@@ -494,8 +494,8 @@ namespace ApiPMU
                     // Table : Chevaux                  //
                     // ******************************** //
                     //
-                    await dbService.SaveOrUpdateChevauxAsync(participantsParsed.Chevaux, updateColumns: true);
-                    _logger.LogInformation($"Détail de course enregistré pour la course n° {numCourse} de la réunion n° {numReunion}");
+                    await dbService.SaveOrUpdateChevauxAsync(participantsParsed.Chevaux, deleteAndRecreate: true);
+                    _logger.LogInformation($"Détail des chevaux enregistré pour la course n° {numCourse} de la réunion n° {numReunion}");
 
                     // ******************************** //
                     // BDD : Enregistrement des données //

@@ -16,8 +16,8 @@ namespace ApiPMU
                 .ConfigureServices((context, services) =>
                 {
                     // Chaîne de connexion intégrée directement dans le code
-                    // var connectionString = "Data Source=.\\SQLEXPRESS;Initial Catalog=genturfevo;User ID=genturfevo;Password=Laurence#1968#;TrustServerCertificate=True";
-                    var connectionString = "Data Source=PRESLESMU\\SQLEXPRESS;Initial Catalog=genturfevo;User ID=genturfevo;Password=Laurence#1968#;TrustServerCertificate=True";
+                    var connectionString = "Data Source=.\\SQLEXPRESS;Initial Catalog=genturfevo;User ID=genturfevo;Password=Laurence#1968#;TrustServerCertificate=True";
+                    // var connectionString = "Data Source=PRESLESMU\\SQLEXPRESS;Initial Catalog=genturfevo;User ID=genturfevo;Password=Laurence#1968#;TrustServerCertificate=True";
 
                     // Enregistrement du DbContext configuré pour SQL Server
                     services.AddDbContext<ApiPMUDbContext>(options =>
