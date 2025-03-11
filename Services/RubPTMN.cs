@@ -1,5 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ApiPMU.Models;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using static System.Collections.Specialized.BitVector32;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace ApiPMU.Services
 {
@@ -1066,6 +1069,31 @@ namespace ApiPMU.Services
                             // '*** Stats SRC calculées dans GenTurfEvoConsole module StatsCombi
                             dbCheval.PourcentDef = 0; // Stats SRC
                         }
+                    }
+
+                    //'**************************************
+                    //'*** Calul Difficulté et Jouabilité ***
+                    //'**************************************
+                    //'*** 
+                    //'*** Nombre de MN < 3 / NbPart * 100
+                    //'***
+                    float calSMN = 0;
+                    float mySMN = 0;
+                    for (int i = 1; i <= nbPartants; i++)
+                    {
+                        if (tabCourse[i, 14] < 3)
+                        {
+                            mySMN += 1;
+                        }
+                    }
+                    calSMN = mySMN / nbPartants * 100;
+
+                    // Mise à jour de la difficulté dans la base de données
+                    var courseToUpdate = await _context.Courses.FirstOrDefaultAsync(c => c.NumGeny == course.NumGeny && c.NumCourse == course.NumCourse);
+                    if (courseToUpdate != null)
+                    {
+                        courseToUpdate.Difficulte = (int)Math.Round(calSMN);
+                        _context.Courses.Update(courseToUpdate);
                     }
 
                     await _context.SaveChangesAsync();

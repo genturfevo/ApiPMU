@@ -64,7 +64,7 @@ namespace ApiPMU
             // Exemple de paramètre à modifier pour forcer une date simple ou une plage :
             // Pour une date unique : "01032025"
             // Pour une plage de dates : "01032025-05032025"
-            string forcedParam = "28022025-11032025"; // <-- modifiez cette valeur selon vos besoins
+            string forcedParam = "28022025-12032025"; // <-- modifiez cette valeur selon vos besoins
             if (forcedParam.Contains("-"))
             {
                 var parts = forcedParam.Split('-');
@@ -80,7 +80,7 @@ namespace ApiPMU
             }
             // Activation du traitement ApiPMU en mode Debug (si true, l'extraction sera exécuté, sinon false )
             // Activation du traitement RubPTMN en mode Debug (si true, RubPTMN sera exécuté après l'extraction, sinon false )
-            _apiPMU = true;
+            _apiPMU = false;
             _runRubPTMN = true;
 #else
             _forcedDate = null;
