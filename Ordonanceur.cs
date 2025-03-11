@@ -191,34 +191,6 @@ namespace ApiPMU
         private async Task ExecuteExtractionForDate(DateTime dateProno, CancellationToken token)
         {
             string dateStr = dateProno.ToString("ddMMyyyy");
-            // ********************************** //
-            // Envoi du courriel de récapitulatif //
-            // ********************************** //
-            //
-            try
-            {
-                // Création d'un scope pour obtenir une instance de ApiPMUDbContext
-                using (var scope = _serviceProvider.CreateScope())
-                {
-                    // Récupération du DbContext généré par le scaffolding
-                    var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
-
-                    // Paramètres pour l'envoi du courriel
-                    bool flagTRT = false; // Ajustez selon votre logique (exemple : définir à true en cas d'incident)
-                    string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "PRESLESMU";
-                    string subjectPrefix = $"{serveur} : ApiPMU début de traitement pour la journée du {dateStr}";
-                    string log = "Initialisation de la trace log";
-                    var courrielService = new CourrielService(
-                         _serviceProvider.GetRequiredService<ILogger<CourrielService>>(),
-                         _connectionString);
-                    await courrielService.SendCompletionEmailAsync(dateProno, flagTRT, subjectPrefix, log, serveur.ToLower(), dbContext);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erreur lors de l'envoi du courriel de début de traitement.");
-            }
-
             _logger.LogInformation("Début du téléchargement des données pour la date {DateStr}.", dateStr);
 
             // ************************************************************************** //
