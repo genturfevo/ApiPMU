@@ -41,7 +41,7 @@ namespace ApiPMU.Services
         /// Effectue un appel HTTP et désérialise la réponse JSON en objet de type T.
         /// Vérifie que la désérialisation ne renvoie pas null.
         /// </summary>
-        private async Task<T> GetJsonFromUrlAsync<T>(string url)
+        private async Task<T?> GetJsonFromUrlAsync<T>(string url)
         {
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3");
@@ -87,11 +87,15 @@ namespace ApiPMU.Services
             {
                 try
                 {
+#pragma warning disable CS8603 // Existence possible d'un retour de référence null.
                     return await GetJsonFromUrlAsync<T>(urlOnline);
+#pragma warning restore CS8603 // Existence possible d'un retour de référence null.
                 }
                 catch (Exception)
                 {
+#pragma warning disable CS8603 // Existence possible d'un retour de référence null.
                     return await GetJsonFromUrlAsync<T>(urlOffline);
+#pragma warning restore CS8603 // Existence possible d'un retour de référence null.
                 }
             }
 
@@ -108,11 +112,15 @@ namespace ApiPMU.Services
             {
                 try
                 {
+#pragma warning disable CS8603 // Existence possible d'un retour de référence null.
                     return await GetJsonFromUrlAsync<T>(urlOnline);
+#pragma warning restore CS8603 // Existence possible d'un retour de référence null.
                 }
                 catch (Exception)
                 {
+#pragma warning disable CS8603 // Existence possible d'un retour de référence null.
                     return await GetJsonFromUrlAsync<T>(urlOffline);
+#pragma warning restore CS8603 // Existence possible d'un retour de référence null.
                 }
             }
 
@@ -129,11 +137,15 @@ namespace ApiPMU.Services
             {
                 try
                 {
+#pragma warning disable CS8603 // Existence possible d'un retour de référence null.
                     return await GetJsonFromUrlAsync<T>(urlOnline);
+#pragma warning restore CS8603 // Existence possible d'un retour de référence null.
                 }
                 catch (Exception)
                 {
+#pragma warning disable CS8603 // Existence possible d'un retour de référence null.
                     return await GetJsonFromUrlAsync<T>(urlOffline);
+#pragma warning restore CS8603 // Existence possible d'un retour de référence null.
                 }
             }
 

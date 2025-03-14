@@ -139,7 +139,7 @@ namespace ApiPMU.Parsers
                 string video = course?["nomPrix"]?.ToString() ?? string.Empty;
                 return new Performance
                 {
-                    Nom = nom,
+                    Nom = nom.Replace("'"," "),
                     DatePerf = datePerf,
                     Lieu = lieu,
                     Dist = dist,

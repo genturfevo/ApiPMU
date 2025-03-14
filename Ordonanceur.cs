@@ -15,6 +15,8 @@ using WebDriverManager;
 using WebDriverManager.DriverConfigs.Impl;
 using OpenQA.Selenium.DevTools.V131.CSS;
 using AngleSharp.Dom;
+using Org.BouncyCastle.Security;
+using System.Collections.Generic;
 
 namespace ApiPMU
 {
@@ -31,6 +33,8 @@ namespace ApiPMU
         private readonly ILogger<Ordonanceur> _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly string _connectionString;
+        private string log = "Traces des traitements de l'ordonnanceur";
+
 
         // Champs pour le mode Debug permettant de forcer l'exécution pour une date ou une plage de dates
         private readonly DateTime? _forcedDate;
@@ -64,7 +68,7 @@ namespace ApiPMU
             // Exemple de paramètre à modifier pour forcer une date simple ou une plage :
             // Pour une date unique : "01032025"
             // Pour une plage de dates : "01032025-05032025"
-            string forcedParam = "28022025-12032025"; // <-- modifiez cette valeur selon vos besoins
+            string forcedParam = "14032025";
             if (forcedParam.Contains("-"))
             {
                 var parts = forcedParam.Split('-');
@@ -80,7 +84,7 @@ namespace ApiPMU
             }
             // Activation du traitement ApiPMU en mode Debug (si true, l'extraction sera exécuté, sinon false )
             // Activation du traitement RubPTMN en mode Debug (si true, RubPTMN sera exécuté après l'extraction, sinon false )
-            _apiPMU = false;
+            _apiPMU = true;
             _runRubPTMN = true;
 #else
             _forcedDate = null;
@@ -106,9 +110,7 @@ namespace ApiPMU
                 }
                 else
                 {
-#pragma warning disable CS8629 // Le type valeur Nullable peut avoir une valeur null.
                     datesToProcess.Add(_forcedDate.Value);
-#pragma warning restore CS8629 // Le type valeur Nullable peut avoir une valeur null.
                 }
 
                 foreach (var date in datesToProcess)
@@ -157,10 +159,13 @@ namespace ApiPMU
 
                     // Exécution de l'extraction pour la date j+1
                     DateTime dateProno = DateTime.Today.AddDays(1);
+                    log = $"Début - Extraction ApiPMU à {DateTime.Now}<BR>";
                     await ExecuteExtractionForDate(dateProno, stoppingToken);
+                    log += $"Fin - Extraction ApiPMU à {DateTime.Now}<BR>";
                     _logger.LogInformation("***** ApiPMU Terminé pour la date {ForcedDate} *****.", dateProno);
 
                     // Appel de RubPTMN pour le calcul des rubriques pour la date en cours
+                    log += $"Début - Calculs RubPTMN à {DateTime.Now}<BR>";
                     using (var scope = _serviceProvider.CreateScope())
                     {
                         var dbContext = scope.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
@@ -168,6 +173,7 @@ namespace ApiPMU
                         await rubPTMN.ProcessCalculsAsync(dateProno);
                         _logger.LogInformation("***** RubPTMN Terminé pour la date {ForcedDate} *****.", dateProno);
                     }
+                    log += $"Fin - Calculs RubPTMN à {DateTime.Now}<BR>";
                 }
                 catch (TaskCanceledException)
                 {
@@ -218,7 +224,7 @@ namespace ApiPMU
                 var parser = new ProgrammeParser(
                     _serviceProvider.GetRequiredService<ILogger<ProgrammeParser>>(),
                     _connectionString);
-                programmeParsed = parser.ParseProgramme(programmeJson, dateStr);
+                programmeParsed = parser.ParseProgramme(programmeJson, dateStr, dateProno);
             }
             _logger.LogInformation("Programme parsé avec {CountReunions} réunions et {CountCourses} courses.",
                                    programmeParsed.Reunions.Count, programmeParsed.Courses.Count);
@@ -494,9 +500,9 @@ namespace ApiPMU
                         //
                         string performancesJson = JsonConvert.SerializeObject(performancesData);
 
-                        // ******************************************** //
-                        // Parser : Extraction des données participants //
-                        // ******************************************** //
+                        // ************************************************************* //
+                        // Parser : Extraction des données performances des participants //
+                        // ************************************************************* //
                         //
                         ListeParticipants performancesParsed;
                         using (var scope = _serviceProvider.CreateScope())
@@ -950,6 +956,57 @@ namespace ApiPMU
                     _logger.LogInformation($"Performances enregistrées pour la course n° {numCourse} de la réunion n° {numReunion}");
 
                 }
+                // ********************************************************** //
+                // Courses de TROTTEURS                                       //
+                // Extractraction du meilleur chrono de la table Performances //
+                // ********************************************************** //
+                //
+                _logger.LogInformation("Début du chargement des records troteurs.");
+                // Boucle sur les courses de la réunion
+                foreach (var course in courses)
+                {
+                    // On ne traite que les courses dont NumGeny commence par "PMU" suivi de dateStr
+                    if (!course.NumGeny.StartsWith("PMU" + dateStr))
+                        continue;
+
+                    // Condition sur la discipline
+                    if (course.Discipline == "ATTELE" || course.Discipline == "MONTE")
+                    {
+                        _logger.LogInformation("Mise à jour des records pour la course n° {NumCourse} de la réunion n° {NumReunion}.", course.NumCourse, numReunion);
+                        using (var scopeUpdate = _serviceProvider.CreateScope())
+                        {
+                            var dbContext = scopeUpdate.ServiceProvider.GetRequiredService<ApiPMUDbContext>();
+
+                            // Récupérer les chevaux de la course courante
+                            var chevaux = dbContext.Chevaux
+                                .Where(c => c.NumGeny == course.NumGeny && c.NumCourse == course.NumCourse)
+                                .ToList();
+
+                            foreach (var cheval in chevaux)
+                            {
+                                // Recherche de la meilleure performance pour le cheval dans la discipline ATTELE ou MONTE
+                                // Ici, on considère que le meilleur chrono correspond à la valeur la plus faible de RedKDist
+                                var bestPerformance = dbContext.Performances
+                                    .Where(p => p.Nom == cheval.Nom
+                                                    && (p.Discipline == "ATTELE" || p.Discipline == "MONTE")
+                                                    && p.RedKDist.StartsWith("1"))
+                                    .OrderBy(p => p.RedKDist)
+                                    .FirstOrDefault();
+
+                                if (bestPerformance != null)
+                                {
+                                    cheval.RecordDate = bestPerformance.DatePerf;
+                                    cheval.RecordPlace = int.TryParse(bestPerformance.Place, out int place) && place > 0 ? place : 0;
+                                    cheval.RecordDistance = (int?)bestPerformance.Dist;
+                                    cheval.RecordFerrage = bestPerformance.Deferre;
+                                    cheval.Record = bestPerformance.RedKDist;
+                                }
+                            }
+                            await dbContext.SaveChangesAsync();
+                        }
+                    }
+                }
+                _logger.LogInformation("Chargement des records troteurs terminé.");
             }
             _logger.LogInformation("Téléchargement des données terminé pour la date {DateStr}.", dateStr);
 
@@ -968,8 +1025,7 @@ namespace ApiPMU
                     // Paramètres pour l'envoi du courriel
                     bool flagTRT = false; // Ajustez selon votre logique (exemple : définir à true en cas d'incident)
                     string serveur = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "PRESLESMU";
-                    string subjectPrefix = $"{serveur} : ApiPMU Fin de traitement";
-                    string log = "Traitement terminé avec succès."; // Vous pouvez construire ce log en fonction des traitements effectués
+                    string subjectPrefix = $"(1) Nuit, chargement des courses du lendemain de 00:00:01 à {DateTime.Now:HH:mm:ss}";
                     var courrielService = new CourrielService(
                          _serviceProvider.GetRequiredService<ILogger<CourrielService>>(),
                          _connectionString);

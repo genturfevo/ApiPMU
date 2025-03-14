@@ -4,6 +4,8 @@ using Microsoft.Data.SqlClient;
 using Newtonsoft.Json.Linq;
 using ApiPMU.Models;
 using Microsoft.Extensions.Logging;
+using System;
+using System.IO;
 
 namespace ApiPMU.Parsers
 {
@@ -49,11 +51,28 @@ namespace ApiPMU.Parsers
         /// <param name="json">Chaîne JSON à parser.</param>
         /// <param name="dateStr">Paramètre additionnel (ex. date d'extraction) – non utilisé ici mais conservé pour la signature.</param>
         /// <returns>Un objet Programme contenant les listes de réunions et de courses.</returns>
-        public ListeProgramme ParseProgramme(string json, string dateStr)
+        public ListeProgramme ParseProgramme(string json, string dateStr, DateTime dateReunion)
         {
             if (json == null)
                 throw new ArgumentNullException(nameof(json));
 
+            // --- Chargement de la réunion ZeTurf ---
+            string dateFile = dateReunion.ToString("yyyy-MM-dd");
+            // --- Détermination de l'URL en fonction de la date ---
+            string urlStream = dateReunion < DateTime.Now.AddDays(-2)
+                                ? "https://www.zeturf.fr/fr/resultats-et-rapports/" + dateFile
+                                : dateReunion < DateTime.Now
+                                    ? "https://www.zeturf.fr/fr/resultats-et-rapports"
+                                    : "https://www.zeturf.fr/fr/programmes-et-pronostics";
+            HttpClient httpClient = new HttpClient();
+            var stream = httpClient.GetStreamAsync(urlStream).Result;
+            // ✅ Lire tout le contenu et stocker dans une variable pour pouvoir le réutiliser
+            string pageContent;
+            using (var reader = new StreamReader(stream, Encoding.Default))
+            {
+                pageContent = reader.ReadToEnd(); // 🔥 On lit tout en mémoire
+            }
+            //
             ListeProgramme programmeResult = new ListeProgramme();
             JObject data = JObject.Parse(json);
             JToken? prog = data["programme"];
@@ -72,7 +91,10 @@ namespace ApiPMU.Parsers
             foreach (JToken reunionToken in reunions)
             {
                 numGeny = "PMU" + dateStr + "R";
-                Reunion? reunionObj = ProcessReunion(reunionToken);
+                // ✅ Créer un nouveau `StringReader` à partir de `pageContent` pour chaque itération
+                using (var stringReader = new StringReader(pageContent))
+                {
+                    Reunion? reunionObj = ProcessReunion(reunionToken, stringReader);
                 if (reunionObj != null)
                 {
                     programmeResult.Reunions.Add(reunionObj);
@@ -89,6 +111,7 @@ namespace ApiPMU.Parsers
                         }
                     }
                 }
+                }
             }
             return programmeResult;
         }
@@ -98,7 +121,7 @@ namespace ApiPMU.Parsers
         /// </summary>
         /// <param name="reunion">Token JSON de la réunion.</param>
         /// <returns>Instance de Reunion ou null en cas d'erreur.</returns>
-        private Reunion? ProcessReunion(JToken reunion)
+        private Reunion? ProcessReunion(JToken reunion, TextReader reader)
         {
             try
             {
@@ -118,6 +141,22 @@ namespace ApiPMU.Parsers
                 {
                     return null;
                 }
+                bool processResult = false;
+                try
+                {
+                    processResult = ProcessZeTurf(normalizedLibelleCourt, dateReunion, reader);
+                }
+                catch
+                {
+                    Console.WriteLine("URL sans réponse pour la date du : " + dateReunion);
+                    processResult = false;
+                }
+                // Si la fonction renvoie false, on interrompt l'exécution (ici on retourne null).
+                if (!processResult)
+                {
+                    return null; 
+                }
+
                 return new Reunion
                 {
                     NumGeny = numGeny,
@@ -383,6 +422,115 @@ namespace ApiPMU.Parsers
             {
                 return "G";
             }
+        }
+        /// <summary>
+        /// Lit le contenu de la page Zeturf, recherche une référence basée sur la date et le lieu,
+        /// et gère en interne les exceptions de noms doubles.
+        /// </summary>
+        /// <param name="lieuCourse">Nom du lieu de la course.</param>
+        /// <param name="myDate">Date utilisée pour déterminer l'URL et la référence de recherche.</param>
+        /// <param name="dateFile">Chaîne de date servant à construire l'URL dans certains cas.</param>
+        /// <returns>True si l'opération se termine correctement, false en cas d'exception.</returns>
+        public static bool ProcessZeTurf(string lieuCourse, DateTime myDate, TextReader reader)
+        {
+            // --- Gestion des exceptions sur les différences de nom (équivalent de DoubleNomHippo) ---
+            bool flagDoubleNom = false;
+            string doubleNom1 = "";
+            string doubleNom2 = "";
+            string lowerLieu = lieuCourse.ToLowerInvariant();
+
+            if (lowerLieu.Contains("agen"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "agen-le-passage";
+                doubleNom2 = "agen";
+            }
+            if (lowerLieu.Contains("longchamp"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "paris-longchamp";
+                doubleNom2 = "longchamp";
+            }
+            if (lowerLieu.Contains("mons"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "mons-belgique";
+                doubleNom2 = "mons";
+            }
+            if (lowerLieu.Contains("enghien"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "enghien-soisy";
+                doubleNom2 = "enghien";
+            }
+            if (lowerLieu.Contains("deauville"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "clairefontaine";
+                doubleNom2 = "deauville";
+            }
+            if (lowerLieu.Contains("clairefontaine"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "clairefontaine";
+                doubleNom2 = "deauville";
+            }
+            if (lowerLieu.Contains("rouen") || lowerLieu.Contains("mauquenchy"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "rouen";
+                doubleNom2 = "mauquenchy";
+            }
+            if (lowerLieu.Contains("lyon"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "lyon-la-soie";
+                doubleNom2 = "lyon-parilly";
+            }
+            if (lowerLieu.Contains("pont-chateau"))
+            {
+                flagDoubleNom = true;
+                doubleNom1 = "pontchateau";
+                doubleNom2 = "pont-chateau";
+            }
+
+            using (reader)
+            {
+                // On formate la date pour obtenir la référence (sans le mois pour éviter les problèmes d'accents)
+                string myRef = myDate.ToString("dddd d", CultureInfo.CurrentCulture).ToUpper();
+                string myRef1 = "";
+                string myRef2 = "";
+                string line;
+
+                // Recherche dans le contenu de la page la ligne contenant la référence
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (line.Contains(myRef) && !line.Contains("div"))
+                    {
+                        // Définition de la référence en fonction du flag double nom
+                        if (flagDoubleNom)
+                        {
+                            myRef1 = doubleNom1;
+                            myRef2 = doubleNom2;
+                        }
+                        else
+                        {
+                            myRef1 = lieuCourse.ToLower().Replace(" ", "-");
+                            myRef2 = myRef1;
+                        }
+                        // Recherche dans les lignes suivantes celle contenant la référence de réunion
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            if (line.Contains(myRef1) || line.Contains(myRef2))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            Console.WriteLine($"Reunion {lieuCourse} non trouvée dans ProcessZeTurf");
+            return false;
         }
     }
 }

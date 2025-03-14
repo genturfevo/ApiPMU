@@ -130,6 +130,14 @@ namespace ApiPMU.Parsers
                     NbVictoires = nbVictoires,
                     NbPlaces = nbPlaces,
                     Avis = avis,
+                    PlaceArrivee = 0,
+                    ClasSynth = 0,
+                    PtsSynth = 0,
+                    Record = "",
+                    RecordDate = new DateTime(2000, 1, 1),
+                    RecordPlace = 0,
+                    RecordFerrage = "",
+                    RecordDistance = 0,
                     DateModif = DateTime.Now
                 };
             }
