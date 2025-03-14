@@ -995,6 +995,7 @@ namespace ApiPMU
 
                                 if (bestPerformance != null)
                                 {
+                                    cheval.Nom = cheval.Nom.Replace("'", " ");
                                     cheval.RecordDate = bestPerformance.DatePerf;
                                     cheval.RecordPlace = int.TryParse(bestPerformance.Place, out int place) && place > 0 ? place : 0;
                                     cheval.RecordDistance = (int?)bestPerformance.Dist;
